@@ -6,6 +6,7 @@ import os
 # os.environ["OMP_NUM_THREADS"] = "4" 
 
 import argparse
+from re import U
 from torch.utils.data import DataLoader, Subset
 from torchvision import transforms
 import torch
@@ -34,7 +35,7 @@ parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=180.)
 parser.add_argument('--osm', choices=('True', 'False'), default='True')
-dataset_root='../VIGOR'
+dataset_root='../../VIGOR'
 
 args = vars(parser.parse_args())
 area = args['area']
@@ -49,9 +50,9 @@ pos_only = args['pos_only']
 label = area + '_HFoV' + str(FoV)
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
-osm = args['osm'] == 'True'
+use_osm = args['osm'] == 'True'
 
-if osm:
+if use_osm:
     prepare_osm_data(dataset_root)
 
 if FoV == 360:
@@ -82,7 +83,10 @@ if training is False and ori_noise==180: # load pre-defined random orientation f
         with open('crossarea_orientation_test.npy', 'rb') as f:
             random_orientation = np.load(f)
 
-vigor = VIGORDataset(dataset_root, split=area, train=training, pos_only=pos_only, transform=(transform_grd, transform_sat), ori_noise=ori_noise, random_orientation=random_orientation)
+if training:
+    random_orientation = np.zeros(90618)
+
+vigor = VIGORDataset(dataset_root, split=area, train=training, pos_only=pos_only, transform=(transform_grd, transform_sat), ori_noise=ori_noise, random_orientation=random_orientation, use_osm_tiles=use_osm)
 
 if training is True:
     dataset_length = int(vigor.__len__())
@@ -147,6 +151,7 @@ if training:
             loss_infoNCE6 = infoNCELoss(torch.flatten(matching_score_stacked6, start_dim=1), torch.flatten(gt_bottleneck6, start_dim=1))
             loss_ce =  cross_entropy_loss(logits_flattened, gt_flattened)
 
+            weighted_infoNCE = weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 
             loss = loss_ce + weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 + weight_ori*loss_ori
 
            
@@ -156,6 +161,7 @@ if training:
             global_step += 1
             # print statistics
             running_loss += loss.item()
+
             if i % 200 == 199:    # print every 200 mini-batches
                 print(f'[{epoch}, {i + 1:5d}] loss: {running_loss / 200:.3f}')
                 running_loss = 0.0

@@ -15,7 +15,7 @@ import numpy as np
 from tqdm import tqdm
 
 # only works for VIGOR dataset
-root = "/scratch/izar/qngo/VIGOR/" # cluster test
+root = "../../VIGOR/" # cluster test
 VIGOR_TILE_SIZE = 72.96 # m
 
 
@@ -73,7 +73,7 @@ def already_downloaded_for(dataset_root: str, city: str) -> bool:
 
 def test_download_per_city(dataset_root: str, city: str) -> None:
     '''
-        Since downloading osm tiles takes around 1 day, this function helps debug the model before the tiles are downloaded
+        Since downloading osm tiles takes around 1 day, this function helps debug the model while the tiles are downloaded
     '''
 
     latlong_list = list_latlong(dataset_root, city)
@@ -185,4 +185,4 @@ def city_list(dataset_root: str) -> List[str]:
     return cities
 
 
-prepare_osm_data(root, test_mode=True)
+prepare_osm_data(root, test_mode=False)

@@ -54,15 +54,15 @@ class VIGORDataset(Dataset):
 
         idx = 0
         for city in self.city_list:
-            sat_list_fname = os.path.join(self.root, label_root, city, 'satellite_list.txt')
-
+            
             #load pickle file for given city
             osm_tile_path = os.path.join(self.root, city, 'osm_tiles', 'data.pkl.gz')
             with gzip.open(osm_tile_path, 'rb') as f:
                 loaded_data = pickle.load(f)
 
             self.osm_tiles.extend(loaded_data)
-
+            
+            sat_list_fname = os.path.join(self.root, label_root, city, 'satellite_list.txt')
             with open(sat_list_fname, 'r') as file:
                 for line in file.readlines():
                     self.sat_list.append(os.path.join(self.root, city, 'satellite', line.replace('\n', '')))
@@ -72,8 +72,6 @@ class VIGORDataset(Dataset):
         self.sat_list = np.array(self.sat_list)
         self.sat_data_size = len(self.sat_list)
         print('Sat loaded, data size:{}'.format(self.sat_data_size))
-
-
 
         # load grd list  
         self.grd_list = []
@@ -145,7 +143,6 @@ class VIGORDataset(Dataset):
         transform_osm_tile = transforms.Compose([
             # resize
             transforms.Resize([512, 512]),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
         if self.use_osm_tiles:
@@ -153,11 +150,11 @@ class VIGORDataset(Dataset):
             _, width_raw, height_raw = osm_tile.shape
 
             osm_tile_tensor = torch.from_numpy(np.ascontiguousarray(osm_tile)).float()
-            
+
             osm_tile = transform_osm_tile(osm_tile_tensor)
             _, height, width = osm_tile.size()
-            col_offset = 320 
-            row_offset = 320
+            pos_index = 0
+            [row_offset, col_offset] = self.delta[idx, pos_index]
             row_offset = np.round(row_offset/height_raw*height)
             col_offset = np.round(col_offset/width_raw*width)
 
@@ -216,10 +213,14 @@ class VIGORDataset(Dataset):
             city = 'SanFrancisco'
         elif 'Chicago' in self.grd_list[idx]:
             city = 'Chicago'
-        
+
         if self.use_osm_tiles:
+            # print(f'gt in dataset has nan : {gt.isnan().any()}')
+            # print(f'max of a tile {osm_tile.max()}')
             return grd, osm_tile, gt, gt_with_ori, orientation, city, orientation_angle
         else:
+            # print(f'sat tile : {sat}')
+            # print(f'max of a sat {sat.max()}')
             return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
 
 
