@@ -15,11 +15,11 @@ import numpy as np
 from tqdm import tqdm
 
 # only works for VIGOR dataset
-root = "VIGOR/"
+root = "/scratch/izar/qngo/VIGOR/" # cluster test
 VIGOR_TILE_SIZE = 72.96 # m
 
 
-def prepare_osm_data(dataset_root: str) -> None:
+def prepare_osm_data(dataset_root: str, test_mode: bool = False) -> None:
     """
     We want to download the tiles if they are not already downloaded
 
@@ -34,7 +34,7 @@ def prepare_osm_data(dataset_root: str) -> None:
     downloaded: bool = is_osm_tiles_downloaded(dataset_root)
 
     if downloaded:
-        print('OSM tiles detected')
+        print('OSM tiles detected', "\n remove all VIGOR/{city}/osm_tiles/data.pkl.gy to redownload tiles")
         return  # already downloaded, exit
 
     print("OSM tiles are not present, will be downloaded now. It will take a very long time, around 6 hours per city.")
@@ -44,26 +44,51 @@ def prepare_osm_data(dataset_root: str) -> None:
     # Each city will have a subfolder 'osm_tiles' with the data
     create_dirs(dataset_root)
 
-    download_tiles(dataset_root)
+    download_tiles(dataset_root, test_mode)
 
     print("OSM tiles are now downloaded")
 
 
-def download_tiles(dataset_root: str) -> None:
+def download_tiles(dataset_root: str, test_mode: bool = False) -> None:
+    '''
+        TODO: host the files somewhere instead
+    '''
     cities = city_list(dataset_root)
     for city in cities:
         if already_downloaded_for(dataset_root, city):
             print(
-                f"tiles for {city} already present"
+                f"tiles for {city} already present \n"
             )  # Since download time is long, we may have downloaded tiles for some cities
         else:
             print("downloading tiles for : ", city)
-            download_per_city(dataset_root, city)
+            if test_mode:
+                test_download_per_city(dataset_root, city)
+            else:
+                download_per_city(dataset_root, city)
 
 
 def already_downloaded_for(dataset_root: str, city: str) -> bool:
     return os.path.isfile(os.path.join(dataset_root, city, "osm_tiles", "data.pkl.gz"))
 
+
+def test_download_per_city(dataset_root: str, city: str) -> None:
+    '''
+        Since downloading osm tiles takes around 1 day, this function helps debug the model before the tiles are downloaded
+    '''
+
+    latlong_list = list_latlong(dataset_root, city)
+    print(len(latlong_list), " tiles for ", city)
+
+    print('TEST MODE')
+    rasterized_map_list = []
+
+    holder = get_osm_raster(latlong_list[0][1])
+    for name, latlong in tqdm(latlong_list, desc=f"Processing tiles for {city}"):
+        rasterized_map_list.append((name, holder))
+
+    osm_dir_path = os.path.join(dataset_root, city, "osm_tiles")
+    with gzip.open(os.path.join(osm_dir_path, "data.pkl.gz"), "wb") as f:
+        pickle.dump(rasterized_map_list, f)
 
 def download_per_city(dataset_root: str, city: str) -> None:
 
@@ -160,4 +185,4 @@ def city_list(dataset_root: str) -> List[str]:
     return cities
 
 
-prepare_osm_data(root)
+prepare_osm_data(root, test_mode=True)
