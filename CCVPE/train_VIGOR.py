@@ -35,7 +35,7 @@ parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=180.)
 parser.add_argument('--osm', choices=('True', 'False'), default='True')
-dataset_root='../../VIGOR'
+dataset_root='/scratch/izar/qngo/VIGOR'
 
 args = vars(parser.parse_args())
 area = args['area']
@@ -47,7 +47,7 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV)
+label = area + '_HFoV' + str(FoV) + '_osm' + "_" + area
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'
