@@ -49,10 +49,10 @@ GrdOriImg_H = 375
 GrdOriImg_W = 1242
 num_thread_workers = 1
 
-train_file = '/scratch/zxia/experiments/HighlyAccurate/dataLoader/train_files.txt'
-test1_file = '/scratch/zxia/experiments/HighlyAccurate/dataLoader/test1_files.txt'
-test2_file = '/scratch/zxia/experiments/HighlyAccurate/dataLoader/test2_files.txt'
-dataset_root = '/scratch/zxia/datasets/KITTI' 
+train_file = 'kitti_split/train_files.txt'
+test1_file = 'kitti_split/test1_files.txt'
+test2_file = 'kitti_split/test2_files.txt'
+dataset_root = '/scratch/izar/qngo/KITTI' 
 
 
 SatMap_original_sidelength = 512 

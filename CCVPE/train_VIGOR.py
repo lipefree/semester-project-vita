@@ -17,7 +17,7 @@ from datasets import VIGORDataset
 from losses import infoNCELoss, cross_entropy_loss, orientation_loss
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
-from osm_handler import prepare_osm_data
+from osm_tiles.vigor_osm_handler import prepare_osm_data
 
 torch.manual_seed(17)
 np.random.seed(0)

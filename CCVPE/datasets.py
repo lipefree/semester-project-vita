@@ -471,6 +471,7 @@ class SatGrdDataset(Dataset):
         # oxt: such as 0000000000.txt
         oxts_file_name = os.path.join(self.root, grdimage_dir, drive_dir, oxts_dir,
                                       image_no.lower().replace('.png', '.txt'))
+        
         with open(oxts_file_name, 'r') as f:
             content = f.readline().split(' ')
             # get heading
