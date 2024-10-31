@@ -17,7 +17,7 @@ from datasets import VIGORDataset
 from losses import infoNCELoss, cross_entropy_loss, orientation_loss
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
-from osm_tiles.vigor_osm_handler import prepare_osm_data
+from vigor_osm_handler import prepare_osm_data
 
 torch.manual_seed(17)
 np.random.seed(0)
@@ -47,7 +47,7 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + '_osm' + "_" + area
+label = area + '_HFoV' + str(FoV) + '_osm' + "_" + area + "2"
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'

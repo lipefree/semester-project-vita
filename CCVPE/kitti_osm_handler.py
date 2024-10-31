@@ -4,11 +4,8 @@ import gzip
 import pickle
 
 from typing import List
-from maploc.demo import Demo, process_latlong
-from maploc.osm.viz import GeoPlotter
+from maploc.demo import process_latlong
 from maploc.osm.tiling import TileManager
-from maploc.osm.viz import Colormap, plot_nodes
-from maploc.utils.viz_2d import plot_images
 import numpy as np
 
 from tqdm import tqdm
@@ -62,22 +59,22 @@ def already_downloaded_for(dataset_root: str, city: str) -> bool:
     return os.path.isfile(os.path.join(dataset_root, city, "osm_tiles", "data.pkl.gz"))
 
 
-def test_download_per_city(dataset_root: str, city: str) -> None:
+def test_download_per_date(dataset_root: str, date: str) -> None:
     """
     Since downloading osm tiles takes around 1 day, this function helps debug the model while the tiles are downloaded
     """
 
-    latlong_list = list_latlong(dataset_root, city)
-    print(len(latlong_list), " tiles for ", city)
+    latlong_list = list_latlong(dataset_root, date)
+    print(len(latlong_list), " tiles for ", date)
 
     print("TEST MODE")
     rasterized_map_list = []
 
     holder = get_osm_raster(latlong_list[0][1])
-    for name, latlong in tqdm(latlong_list, desc=f"Processing tiles for {city}"):
+    for name, latlong in tqdm(latlong_list, desc=f"Processing tiles for {date}"):
         rasterized_map_list.append((name, holder))
 
-    osm_dir_path = os.path.join(dataset_root, city, "osm_tiles")
+    osm_dir_path = os.path.join(dataset_root, date, "osm_tiles")
     with gzip.open(os.path.join(osm_dir_path, "data.pkl.gz"), "wb") as f:
         pickle.dump(rasterized_map_list, f)
 
@@ -99,8 +96,8 @@ def get_osm_raster(latlong: tuple[float, float]) -> np.ndarray:
 
     proj, bbox = process_latlong(
         prior_latlon=latlong,
-        tile_size_meters=int(KITTI_TILE_SIZE / 2),
-    )
+        tile_size_meters=KITTI_TILE_SIZE,
+        )
     ppm = 640 / KITTI_TILE_SIZE / 2  # To get 640x640 pixels at the end
     tiler = TileManager.from_bbox(proj, bbox, ppm)  # type: ignore
     canvas = tiler.query(bbox)
@@ -164,8 +161,3 @@ def date_list(dataset_root: str) -> List[str]:
 
 def file_list() -> List[str]:
     return os.listdir("kitti_split")
-
-
-# prepare_osm_data(root, test_mode=False)
-
-print(file_list())

@@ -1,0 +1,4 @@
+0_FoV360_validation_set_median_orientation_error:
+4.866471
+1_FoV360_validation_set_median_orientation_error:
+4.287930

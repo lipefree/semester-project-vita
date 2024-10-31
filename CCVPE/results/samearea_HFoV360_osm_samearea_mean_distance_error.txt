@@ -1,0 +1,4 @@
+0_FoV360_validation_set_mean_distance_error_in_meters:
+54.813590
+1_FoV360_validation_set_mean_distance_error_in_meters:
+54.626403

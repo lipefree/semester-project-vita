@@ -1,0 +1,4 @@
+0_FoV360_validation_set_mean_orientatione_error:
+8.438305
+1_FoV360_validation_set_mean_orientatione_error:
+4.290924

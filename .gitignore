@@ -1,3 +1,4 @@
 __pycache__/
 *.pyc
 CCVPE/experiments/*
+CCVPE/models/
