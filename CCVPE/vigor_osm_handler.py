@@ -109,13 +109,13 @@ def get_osm_raster(latlong: tuple[float, float]) -> np.ndarray:
 
     proj, bbox = process_latlong(
         prior_latlon=latlong,
-        tile_size_meters=int(VIGOR_TILE_SIZE/2),
+        tile_size_meters=VIGOR_TILE_SIZE
     )
     ppm = 640 / 73 / 2  # To get 640x640 pixels at the end
     tiler = TileManager.from_bbox(proj, bbox, ppm)  # type: ignore
     canvas = tiler.query(bbox)
 
-    return canvas.raster[:, 1:, :]  # reshape to get consistent [3, 640, 640]
+    return canvas.raster
 
 
 def list_latlong(dataset_root: str, city: str) -> List[tuple[str, tuple[float, float]]]:
