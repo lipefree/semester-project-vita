@@ -35,7 +35,7 @@ parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=180.)
 parser.add_argument('--osm', choices=('True', 'False'), default='True')
-dataset_root='/scratch/izar/qngo/VIGOR'
+dataset_root='../../VIGOR'
 
 args = vars(parser.parse_args())
 area = args['area']
