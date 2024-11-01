@@ -64,11 +64,24 @@ def download_tiles(dataset_root: str, test_mode: bool = False) -> None:
             if test_mode:
                 test_download_per_city(dataset_root, city)
             else:
-                download_per_city(dataset_root, city)
+                try:
+                    download_per_city(dataset_root, city)
+                except ValueError:
+                    print('The API returned an error. Please try later or check private coffee status online')
+                    return
 
 
 def already_downloaded_for(dataset_root: str, city: str) -> bool:
-    return os.path.isfile(os.path.join(dataset_root, city, "osm_tiles", "data.pkl.gz"))
+    osm_tiles_path = os.path.join(dataset_root, city, "osm_tiles", "data.pkl.gz")
+    if not os.path.isfile(osm_tiles_path):
+        return False
+
+    with gzip.open(osm_tiles_path, 'rb') as f:
+        length_loaded_data = len(pickle.load(f))
+        length_latlong_list = len(list_latlong(dataset_root, city))
+
+        return length_loaded_data == length_latlong_list
+
 
 
 def test_download_per_city(dataset_root: str, city: str) -> None:
@@ -90,15 +103,43 @@ def test_download_per_city(dataset_root: str, city: str) -> None:
     with gzip.open(os.path.join(osm_dir_path, "data.pkl.gz"), "wb") as f:
         pickle.dump(rasterized_map_list, f)
 
-def download_per_city(dataset_root: str, city: str) -> None:
 
+def download_per_city(dataset_root: str, city: str) -> None:
+    '''
+        This simply downloads but has a backup mechanism in case private coffee is not stable.
+    '''
     latlong_list = list_latlong(dataset_root, city)
     print(len(latlong_list), " tiles for ", city)
 
     rasterized_map_list = []
-    for name, latlong in tqdm(latlong_list, desc=f"Processing tiles for {city}"):
+
+    osm_tiles_path = os.path.join(dataset_root, city, "osm_tiles", "data.pkl.gz")
+    if os.path.isfile(osm_tiles_path):
+        with gzip.open(osm_tiles_path, 'rb') as f:
+            loaded_data = pickle.load(f)
+            rasterized_map_list.extend(loaded_data)
+
+    size_backup = len(rasterized_map_list)
+    if size_backup > 0:
+        print(f'{size_backup} pre-downloaded tiles for {city} detected')
+
+    for i, (name, latlong) in enumerate(tqdm(latlong_list[size_backup:], desc=f"Processing tiles for {city}")):
+        try:
+            get_osm_raster(latlong)
+        except ValueError:
+            dump_rasterized_list(dataset_root, city, rasterized_map_list)  # early dump in case private coffee has problems
+            print('error from API instance. Downloaded data are saved')
+            raise ValueError # Propagate error
+        
         rasterized_map_list.append((name, get_osm_raster(latlong)))
 
+        if i % 500 == 0:
+            dump_rasterized_list(dataset_root, city, rasterized_map_list)
+
+    dump_rasterized_list(dataset_root, city, rasterized_map_list)
+
+
+def dump_rasterized_list(dataset_root: str, city: str, rasterized_map_list) -> None:
     osm_dir_path = os.path.join(dataset_root, city, "osm_tiles")
     with gzip.open(os.path.join(osm_dir_path, "data.pkl.gz"), "wb") as f:
         pickle.dump(rasterized_map_list, f)
@@ -185,4 +226,5 @@ def city_list(dataset_root: str) -> List[str]:
     return cities
 
 
-prepare_osm_data(root, test_mode=False)
+if __name__ == '__main__':
+    prepare_osm_data(root, test_mode=False)
