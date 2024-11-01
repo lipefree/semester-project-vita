@@ -11,7 +11,7 @@ import numpy as np
 from tqdm import tqdm
 
 # only works for KITTI dataset
-root = "/work/vita/datasets/KITTI"  # cluster test
+root = "/scratch/izar/qngo/KITTI/KITTI"  # cluster test
 KITTI_TILE_SIZE = 102.4  # m
 
 
@@ -23,6 +23,10 @@ def prepare_osm_data(dataset_root: str, test_mode: bool = False) -> None:
 
     Main function of this file
     """
+    if not is_dataset_present(dataset_root):
+        print("Provited dataset root does not exist")
+        return
+
     # check if osm data is already downloaded
     downloaded: bool = is_osm_tiles_downloaded(dataset_root)
 
@@ -51,7 +55,7 @@ def download_tiles(dataset_root: str, test_mode: bool = False) -> None:
 
     TODO: host the files somewhere instead
     """
-    for file in file_list(dataset_root):
+    for file in file_list():
         download_per_file(dataset_root, file)
 
 
@@ -82,6 +86,8 @@ def test_download_per_date(dataset_root: str, date: str) -> None:
 def download_per_file(dataset_root: str, file: str) -> None:
     latlong_list = list_latlong(dataset_root, file)
 
+    print(f'list latlong for {file} is {latlong_list}')
+    return
     rasterized_map_list = []
     for name, latlong in tqdm(latlong_list, desc=f"Processing tiles for {file}"):
         rasterized_map_list.append((name, get_osm_raster(latlong)))
@@ -137,7 +143,7 @@ def create_dirs(dataset_root: str) -> None:
     path = os.path.join(dataset_root, "osm_tiles")
     for file in file_list():
         try:
-            os.makedirs(os.path.join(path, "file"))
+            os.makedirs(os.path.join(path, file))
         except:
             print(f"dir for {file} tiles already present")
 
@@ -161,3 +167,10 @@ def date_list(dataset_root: str) -> List[str]:
 
 def file_list() -> List[str]:
     return os.listdir("kitti_split")
+
+
+def is_dataset_present(dataset_root: str) -> bool:
+    return os.path.isdir(dataset_root)
+
+
+prepare_osm_data(root)
