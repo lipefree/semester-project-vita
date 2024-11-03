@@ -20,3 +20,11 @@
 48.261617
 10_FoV360_validation_set_mean_distance_error_in_meters:
 47.993028
+0_FoV360_validation_set_mean_distance_error_in_meters:
+46.373080
+1_FoV360_validation_set_mean_distance_error_in_meters:
+45.029588
+2_FoV360_validation_set_mean_distance_error_in_meters:
+47.780758
+3_FoV360_validation_set_mean_distance_error_in_meters:
+48.217659

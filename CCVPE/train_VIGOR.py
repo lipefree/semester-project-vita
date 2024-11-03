@@ -18,6 +18,7 @@ from losses import infoNCELoss, cross_entropy_loss, orientation_loss
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
 from vigor_osm_handler import prepare_osm_data
+import tensorflow as tf
 
 torch.manual_seed(17)
 np.random.seed(0)
@@ -28,14 +29,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--area', type=str, help='samearea or crossarea', default='samearea')
 parser.add_argument('--training', choices=('True','False'), default='True')
 parser.add_argument('--pos_only', choices=('True','False'), default='True')
-parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
+parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-3)
 parser.add_argument('-b', '--batch_size', type=int, help='batch size', default=8)
 parser.add_argument('--weight_ori', type=float, help='weight on orientation loss', default=1e1)
 parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss', default=1e4)
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=180.)
 parser.add_argument('--osm', choices=('True', 'False'), default='True')
-dataset_root='../../VIGOR'
+dataset_root='/scratch/izar/qngo/VIGOR'
 
 args = vars(parser.parse_args())
 area = args['area']
@@ -47,7 +48,7 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + '_osm' + "_" + area + "2"
+label = area + '_HFoV' + str(FoV) + '_osm' + "_" + area + "_increasedLR"
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'

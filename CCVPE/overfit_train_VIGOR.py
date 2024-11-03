@@ -18,10 +18,15 @@ from losses import infoNCELoss, cross_entropy_loss, orientation_loss
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
 from vigor_osm_handler import prepare_osm_data
+from dotenv import load_dotenv
+from torch.utils.tensorboard import SummaryWriter
+
+load_dotenv()
 
 torch.manual_seed(17)
 np.random.seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+writer = SummaryWriter()
 "The device is: {}".format(device)
 
 parser = argparse.ArgumentParser()
@@ -35,7 +40,7 @@ parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=180.)
 parser.add_argument('--osm', choices=('True', 'False'), default='True')
-dataset_root='../../VIGOR'
+dataset_root=os.getenv('VIGOR_DATASET')
 
 args = vars(parser.parse_args())
 area = args['area']
@@ -47,10 +52,12 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + '_osm' + "_" + area + "2"
+label = area + '_HFoV' + str(FoV) + "_" + area + "overfit_interactive"
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'
+if use_osm:
+    label += "_osm"
 
 if use_osm:
     prepare_osm_data(dataset_root)
@@ -92,10 +99,11 @@ if training is True:
     dataset_length = int(vigor.__len__())
     index_list = np.arange(vigor.__len__())
     np.random.shuffle(index_list)
-    train_indices = index_list[0: int(len(index_list)*0.02)]
+    train_indices = index_list[0: 9]
     val_indices = index_list[int(len(index_list)*0.8):]
     training_set = Subset(vigor, train_indices)
     val_set = Subset(vigor, train_indices)
+    print(f'training for {len(train_indices)}')
     train_dataloader = DataLoader(training_set, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
 else:
@@ -114,7 +122,7 @@ if training:
     global_step = 0
     # with torch.autograd.set_detect_anomaly(True):
 
-    for epoch in range(15):  # loop over the dataset multiple times
+    for epoch in range(300):  # loop over the dataset multiple times
         running_loss = 0.0
         CVM_model.train()
         for i, data in enumerate(train_dataloader, 0):
@@ -153,7 +161,9 @@ if training:
 
             weighted_infoNCE = weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 
             loss = loss_ce + weight_infoNCE*(loss_infoNCE+loss_infoNCE2+loss_infoNCE3+loss_infoNCE4+loss_infoNCE5+loss_infoNCE6)/6 + weight_ori*loss_ori
-
+            writer.add_scalar("Loss/train", loss, epoch)
+            
+            
             loss.backward()
             optimizer.step()
 
@@ -161,14 +171,15 @@ if training:
             # print statistics
             running_loss += loss.item()
 
-            if i % 5 == 4:    # print every 200 mini-batches
-                print(f'[{epoch}, {i + 1:5d}] loss: {running_loss / 200:.3f}')
-                running_loss = 0.0
-
+            #if i % 5 == 4:    # print every 200 mini-batches
+            print(f'[{epoch}, {i + 1:5d}] loss: {running_loss / 200:.3f}')
+            running_loss = 0.0
+            
+        writer.flush()
         model_dir = 'models/VIGOR/'+label+'/' + str(epoch) + '/'
-        if not os.path.exists(model_dir):
-            os.makedirs(model_dir)
-        torch.save(CVM_model.cpu().state_dict(), model_dir+'model.pt') # saving model
+        #if not os.path.exists(model_dir):
+        #    os.makedirs(model_dir)
+        #torch.save(CVM_model.cpu().state_dict(), model_dir+'model.pt') # saving model
         CVM_model.cuda() # moving model to GPU for further training
         CVM_model.eval()
 
@@ -188,9 +199,9 @@ if training:
             logits_flattened, heatmap, ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, \
                     matching_score_stacked4, matching_score_stacked5, matching_score_stacked6= CVM_model(grd, sat)  
 
-            gt = gt.cpu().detach().numpy() 
-            gt_with_ori = gt_with_ori.cpu().detach().numpy() 
-            gt_orientation = gt_orientation.cpu().detach().numpy() 
+            gt = gt.cpu().detach().numpy()
+            gt_with_ori = gt_with_ori.cpu().detach().numpy()
+            gt_orientation = gt_orientation.cpu().detach().numpy()
             heatmap = heatmap.cpu().detach().numpy()
             ori = ori.cpu().detach().numpy()
             for batch_idx in range(gt.shape[0]):
@@ -238,13 +249,13 @@ if training:
             np.savetxt(f, [median_distance_error], fmt='%4f', header='FoV'+str(FoV)+ '_validation_set_median_distance_error_in_meters:', comments=str(epoch)+'_')
 
         mean_orientation_error = np.mean(orientation_error)
-        print('epoch: ', epoch, 'FoV'+str(FoV)+ '_mean orientation error on validation set: ', mean_orientation_error)
+        #print('epoch: ', epoch, 'FoV'+str(FoV)+ '_mean orientation error on validation set: ', mean_orientation_error)
         file = 'results/'+label+'_mean_orientation_error.txt'
         with open(file,'ab') as f:
             np.savetxt(f, [mean_orientation_error], fmt='%4f', header='FoV'+str(FoV)+ '_validation_set_mean_orientatione_error:', comments=str(epoch)+'_')
 
         median_orientation_error = np.median(orientation_error)
-        print('epoch: ', epoch, 'FoV'+str(FoV)+ '_median orientation error on validation set: ', median_orientation_error)
+        #print('epoch: ', epoch, 'FoV'+str(FoV)+ '_median orientation error on validation set: ', median_orientation_error)
         file = 'results/'+label+'_median_orientation_error.txt'
         with open(file,'ab') as f:
             np.savetxt(f, [median_orientation_error], fmt='%4f', header='FoV'+str(FoV)+ '_validation_set_median_orientation_error:', comments=str(epoch)+'_')

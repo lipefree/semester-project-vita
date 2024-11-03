@@ -20,3 +20,11 @@
 49.203301
 10_FoV360_validation_set_median_distance_error_in_meters:
 48.754083
+0_FoV360_validation_set_median_distance_error_in_meters:
+45.993060
+1_FoV360_validation_set_median_distance_error_in_meters:
+44.298038
+2_FoV360_validation_set_median_distance_error_in_meters:
+46.142915
+3_FoV360_validation_set_median_distance_error_in_meters:
+48.183040

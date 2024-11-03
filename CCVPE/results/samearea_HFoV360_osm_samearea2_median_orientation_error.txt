@@ -20,3 +20,11 @@
 0.000000
 10_FoV360_validation_set_median_orientation_error:
 0.000000
+0_FoV360_validation_set_median_orientation_error:
+61.244747
+1_FoV360_validation_set_median_orientation_error:
+14.344112
+2_FoV360_validation_set_median_orientation_error:
+21.909431
+3_FoV360_validation_set_median_orientation_error:
+23.431561

@@ -20,3 +20,11 @@
 0.002115
 10_FoV360_validation_set_mean_orientatione_error:
 0.015590
+0_FoV360_validation_set_mean_orientatione_error:
+62.848745
+1_FoV360_validation_set_mean_orientatione_error:
+21.300711
+2_FoV360_validation_set_mean_orientatione_error:
+20.484766
+3_FoV360_validation_set_mean_orientatione_error:
+19.538320
