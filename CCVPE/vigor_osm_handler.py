@@ -15,8 +15,8 @@ import numpy as np
 from tqdm import tqdm
 
 # only works for VIGOR dataset
-root = "../../VIGOR/" # cluster test
-VIGOR_TILE_SIZE = 72.96 # m
+root = "../../VIGOR/"  # cluster test
+VIGOR_TILE_SIZE = 72.96  # m
 
 
 def prepare_osm_data(dataset_root: str, test_mode: bool = False) -> None:
@@ -34,10 +34,15 @@ def prepare_osm_data(dataset_root: str, test_mode: bool = False) -> None:
     downloaded: bool = is_osm_tiles_downloaded(dataset_root)
 
     if downloaded:
-        print('OSM tiles detected', "\n remove all VIGOR/{city}/osm_tiles/data.pkl.gy to redownload tiles")
+        print(
+            "OSM tiles detected",
+            "\n remove all VIGOR/{city}/osm_tiles/data.pkl.gy to redownload tiles",
+        )
         return  # already downloaded, exit
 
-    print("OSM tiles are not present, will be downloaded now. It will take a very long time, around 6 hours per city.")
+    print(
+        "OSM tiles are not present, will be downloaded now. It will take a very long time, around 6 hours per city."
+    )
 
     print("cities : ", city_list(dataset_root))
 
@@ -50,9 +55,9 @@ def prepare_osm_data(dataset_root: str, test_mode: bool = False) -> None:
 
 
 def download_tiles(dataset_root: str, test_mode: bool = False) -> None:
-    '''
-        TODO: host the files somewhere instead
-    '''
+    """
+    TODO: host the files somewhere instead
+    """
     cities = city_list(dataset_root)
     for city in cities:
         if already_downloaded_for(dataset_root, city):
@@ -67,7 +72,9 @@ def download_tiles(dataset_root: str, test_mode: bool = False) -> None:
                 try:
                     download_per_city(dataset_root, city)
                 except ValueError:
-                    print('The API returned an error. Please try later or check private coffee status online')
+                    print(
+                        "The API returned an error. Please try later or check private coffee status online"
+                    )
                     return
 
 
@@ -76,23 +83,22 @@ def already_downloaded_for(dataset_root: str, city: str) -> bool:
     if not os.path.isfile(osm_tiles_path):
         return False
 
-    with gzip.open(osm_tiles_path, 'rb') as f:
+    with gzip.open(osm_tiles_path, "rb") as f:
         length_loaded_data = len(pickle.load(f))
         length_latlong_list = len(list_latlong(dataset_root, city))
 
         return length_loaded_data == length_latlong_list
 
 
-
 def test_download_per_city(dataset_root: str, city: str) -> None:
-    '''
-        Since downloading osm tiles takes around 1 day, this function helps debug the model while the tiles are downloaded
-    '''
+    """
+    Since downloading osm tiles takes around 1 day, this function helps debug the model while the tiles are downloaded
+    """
 
     latlong_list = list_latlong(dataset_root, city)
     print(len(latlong_list), " tiles for ", city)
 
-    print('TEST MODE')
+    print("TEST MODE")
     rasterized_map_list = []
 
     holder = get_osm_raster(latlong_list[0][1])
@@ -105,9 +111,9 @@ def test_download_per_city(dataset_root: str, city: str) -> None:
 
 
 def download_per_city(dataset_root: str, city: str) -> None:
-    '''
-        This simply downloads but has a backup mechanism in case private coffee is not stable.
-    '''
+    """
+    This simply downloads but has a backup mechanism in case private coffee is not stable.
+    """
     latlong_list = list_latlong(dataset_root, city)
     print(len(latlong_list), " tiles for ", city)
 
@@ -115,22 +121,26 @@ def download_per_city(dataset_root: str, city: str) -> None:
 
     osm_tiles_path = os.path.join(dataset_root, city, "osm_tiles", "data.pkl.gz")
     if os.path.isfile(osm_tiles_path):
-        with gzip.open(osm_tiles_path, 'rb') as f:
+        with gzip.open(osm_tiles_path, "rb") as f:
             loaded_data = pickle.load(f)
             rasterized_map_list.extend(loaded_data)
 
     size_backup = len(rasterized_map_list)
     if size_backup > 0:
-        print(f'{size_backup} pre-downloaded tiles for {city} detected')
+        print(f"{size_backup} pre-downloaded tiles for {city} detected")
 
-    for i, (name, latlong) in enumerate(tqdm(latlong_list[size_backup:], desc=f"Processing tiles for {city}")):
+    for i, (name, latlong) in enumerate(
+        tqdm(latlong_list[size_backup:], desc=f"Processing tiles for {city}")
+    ):
         try:
             m = get_osm_raster(latlong)
         except:
-            dump_rasterized_list(dataset_root, city, rasterized_map_list)  # early dump in case private coffee has problems
-            print('error from API instance. Downloaded data are saved')
-            raise ValueError # Propagate error
-        
+            dump_rasterized_list(
+                dataset_root, city, rasterized_map_list
+            )  # early dump in case private coffee has problems
+            print("error from API instance. Downloaded data are saved")
+            raise ValueError  # Propagate error
+
         rasterized_map_list.append((name, m))
 
         if i % 10_000 == 0:
@@ -149,8 +159,7 @@ def get_osm_raster(latlong: tuple[float, float]) -> np.ndarray:
     # Orienternet black box magic but we do get our osm tile (canvas.raster) at the end
 
     proj, bbox = process_latlong(
-        prior_latlon=latlong,
-        tile_size_meters=VIGOR_TILE_SIZE/2
+        prior_latlon=latlong, tile_size_meters=VIGOR_TILE_SIZE / 2
     )
     ppm = 640 / 73  # To get 640x640 pixels at the end
     tiler = TileManager.from_bbox(proj, bbox, ppm)  # type: ignore
@@ -226,5 +235,5 @@ def city_list(dataset_root: str) -> List[str]:
     return cities
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     prepare_osm_data(root, test_mode=False)
