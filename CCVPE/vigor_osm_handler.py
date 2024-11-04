@@ -125,15 +125,15 @@ def download_per_city(dataset_root: str, city: str) -> None:
 
     for i, (name, latlong) in enumerate(tqdm(latlong_list[size_backup:], desc=f"Processing tiles for {city}")):
         try:
-            get_osm_raster(latlong)
-        except ValueError:
+            m = get_osm_raster(latlong)
+        except:
             dump_rasterized_list(dataset_root, city, rasterized_map_list)  # early dump in case private coffee has problems
             print('error from API instance. Downloaded data are saved')
             raise ValueError # Propagate error
         
-        rasterized_map_list.append((name, get_osm_raster(latlong)))
+        rasterized_map_list.append((name, m))
 
-        if i % 500 == 0:
+        if i % 10_000 == 0:
             dump_rasterized_list(dataset_root, city, rasterized_map_list)
 
     dump_rasterized_list(dataset_root, city, rasterized_map_list)
@@ -150,9 +150,9 @@ def get_osm_raster(latlong: tuple[float, float]) -> np.ndarray:
 
     proj, bbox = process_latlong(
         prior_latlon=latlong,
-        tile_size_meters=VIGOR_TILE_SIZE
+        tile_size_meters=VIGOR_TILE_SIZE/2
     )
-    ppm = 640 / 73 / 2  # To get 640x640 pixels at the end
+    ppm = 640 / 73  # To get 640x640 pixels at the end
     tiler = TileManager.from_bbox(proj, bbox, ppm)  # type: ignore
     canvas = tiler.query(bbox)
 

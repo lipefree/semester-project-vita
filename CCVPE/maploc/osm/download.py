@@ -69,16 +69,22 @@ def get_osm(
     URL = COFFEE_OVERPASS_URL
 
     # Send the POST request to Overpass API
-    result = http.request(
-        "POST",
-        URL,
-        body=f"data={overpass_query}",
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        timeout=60  # Increased timeout to allow for longer processing
-    )
+
+    try:
+        result = http.request(
+            "POST",
+            URL,
+            body=f"data={overpass_query}",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=60
+        )
+    except:
+        print('Network problem detected')
+        raise ValueError
 
     # Check for errors in the response
     if result.status != 200:
+        print('HHTP ERROR')
         error_message = result.data.decode('utf-8') if result.data else "Unknown error"
         raise ValueError(f"{result.status} {responses.get(result.status, 'Unknown Error')}: {error_message}")
 

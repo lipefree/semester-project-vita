@@ -15,6 +15,7 @@ from .download import get_osm
 from .parser import Groups
 from .raster import Canvas, render_raster_map, render_raster_masks
 from .reader import OSMData, OSMNode, OSMWay
+from matplotlib import pyplot as plt
 
 
 class MapIndex:
