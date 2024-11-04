@@ -56,11 +56,14 @@ class VIGORDataset(Dataset):
         for city in self.city_list:
             
             #load pickle file for given city
-            osm_tile_path = os.path.join(self.root, city, 'osm_tiles', 'data.pkl.gz')
-            with gzip.open(osm_tile_path, 'rb') as f:
-                loaded_data = pickle.load(f)
+            if self.use_osm_tiles:
+                osm_tile_path = os.path.join(self.root, city, 'osm_tiles', 'data.pkl.gz')
+                with gzip.open(osm_tile_path, 'rb') as f:
+                    loaded_data = pickle.load(f)
 
-            self.osm_tiles.extend(loaded_data)
+                print(f'loaded data pikle')
+                self.osm_tiles.extend(loaded_data)
+                print(f'osm tiles loaded for {city}')
             
             sat_list_fname = os.path.join(self.root, label_root, city, 'satellite_list.txt')
             with open(sat_list_fname, 'r') as file:
