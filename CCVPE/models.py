@@ -47,10 +47,22 @@ def double_conv(in_channels, out_channels):
     )
 
 class CVM_VIGOR(nn.Module):
-    def __init__(self, device, circular_padding):
+    def __init__(self, device, circular_padding, use_adapt, use_concat):
         super(CVM_VIGOR, self).__init__()
         self.device = device
         self.circular_padding = circular_padding
+        self.use_adapt = use_adapt # If using osm tiles with 50 layers
+        self.use_concat = use_concat # If using simple fusion with concat
+
+        self.adapt_concat = nn.Sequential(
+                nn.Conv2d(in_channels=6, out_channels=3, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True)
+            )
+
+        self.adapt_50_n = nn.Sequential(
+                nn.Conv2d(in_channels=50, out_channels=3, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True)
+            )
         
         self.grd_efficientnet = EfficientNet.from_pretrained('efficientnet-b0', self.circular_padding)
 
@@ -162,7 +174,14 @@ class CVM_VIGOR(nn.Module):
         grd_descriptor_map4 = grd_descriptor4.unsqueeze(2).unsqueeze(3).repeat(1, 1, 64, 64)
         grd_descriptor_map5 = grd_descriptor5.unsqueeze(2).unsqueeze(3).repeat(1, 1, 128, 128)
         grd_descriptor_map6 = grd_descriptor6.unsqueeze(2).unsqueeze(3).repeat(1, 1, 256, 256)
-      
+
+        # TODO: This is really a bad way to do it, redo it later (I hope one day)
+        if self.use_adapt:
+            sat = self.adapt_50_n(sat)
+
+        if self.use_concat:
+            sat = self.adapt_concat(sat)
+            
         sat_feature_volume, multiscale_sat = self.sat_efficientnet.extract_features_multiscale(sat)
         sat_feature_block0 = multiscale_sat[0] # [16, 256, 256]
         sat_feature_block2 = multiscale_sat[2] #[24, 128, 128]
@@ -340,7 +359,7 @@ class CVM_VIGOR(nn.Module):
         x_ori = self.conv1_ori(x_ori)
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)
         
-        return logits_flattened, heatmap, x_ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6
+        return logits_flattened, heatmap, x_ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked
     
 
 class CVM_VIGOR_ori_prior(nn.Module):
