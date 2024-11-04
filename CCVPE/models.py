@@ -359,7 +359,7 @@ class CVM_VIGOR(nn.Module):
         x_ori = self.conv1_ori(x_ori)
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)
         
-        return logits_flattened, heatmap, x_ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked
+        return logits_flattened, heatmap, x_ori, matching_score_stacked, matching_score_stacked2, matching_score_stacked3, matching_score_stacked4, matching_score_stacked5, matching_score_stacked6
     
 
 class CVM_VIGOR_ori_prior(nn.Module):

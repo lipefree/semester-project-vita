@@ -50,14 +50,16 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e')
+label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + "test 50 n"
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'
+use_adapt = True
 
 if use_osm:
     label += '_osm'
-
+    
+print(f'model name {label}')
 writer = SummaryWriter(log_dir=os.path.join('runs', label))
 
 if use_osm:
@@ -82,7 +84,6 @@ transform_sat = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-
 if training is False and ori_noise==180: # load pre-defined random orientation for testing
     if area == 'samearea':
         with open('samearea_orientation_test.npy', 'rb') as f:
@@ -94,7 +95,7 @@ if training is False and ori_noise==180: # load pre-defined random orientation f
 if training:
     random_orientation = np.zeros(90618)
 
-vigor = VIGORDataset(dataset_root, split=area, train=training, pos_only=pos_only, transform=(transform_grd, transform_sat), ori_noise=ori_noise, random_orientation=random_orientation, use_osm_tiles=use_osm)
+vigor = VIGORDataset(dataset_root, split=area, train=training, pos_only=pos_only, transform=(transform_grd, transform_sat), ori_noise=ori_noise, random_orientation=random_orientation, use_osm_tiles=use_osm, use_50_n_osm_tiles=use_adapt)
 
 if training is True:
     dataset_length = int(vigor.__len__())
@@ -111,7 +112,8 @@ else:
 
 if training:
     torch.cuda.empty_cache()
-    CVM_model = CVM(device, circular_padding)
+    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=False)
+    
     CVM_model.to(device)
     for param in CVM_model.parameters():
         param.requires_grad = True
