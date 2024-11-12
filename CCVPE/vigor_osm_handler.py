@@ -5,7 +5,7 @@ import gzip
 import pickle
 
 from typing import List
-from maploc.demo import Demo, process_latlong
+from maploc.latlong_utils import process_latlong
 from maploc.osm.viz import GeoPlotter
 from maploc.osm.tiling import TileManager
 from maploc.osm.viz import Colormap, plot_nodes
