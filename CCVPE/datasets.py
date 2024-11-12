@@ -14,6 +14,7 @@ import gzip
 import pickle
 from torchvision import transforms
 from osm_tiles_helper import project_to_n
+from maploc.osm.viz import Colormap
 
 torch.manual_seed(17)
 np.random.seed(0)
@@ -45,6 +46,7 @@ class VIGORDataset(Dataset):
         self.random_orientation = random_orientation
         self.use_osm_tiles = use_osm_tiles  # If using osm tiles instead of sat images TODO: rework this to a more modular way
         self.use_50_n_osm_tiles = use_50_n_osm_tiles  # If we want to transform the osm tiles to 50 layers (corresponding to the 50 classes for OSM objects) TODO: this is really a bad way to do it
+        self.use_rendered_tiles = False
 
         if transform != None:
             self.grdimage_transform = transform[0]
@@ -92,6 +94,7 @@ class VIGORDataset(Dataset):
                     self.sat_index_dict[line.replace("\n", "")] = idx
                     idx += 1
             print("InputData::__init__: load", sat_list_fname, idx)
+            
         self.sat_list = np.array(self.sat_list)
         self.sat_data_size = len(self.sat_list)
         print("Sat loaded, data size:{}".format(self.sat_data_size))
@@ -192,7 +195,24 @@ class VIGORDataset(Dataset):
         )
 
         if self.use_osm_tiles:
-            osm_tile: np.ndarray = self.osm_tiles[idx][1]
+            pos_index = 0
+            osm_idx = self.label[idx][pos_index]
+
+            osm_tile: np.ndarray = self.osm_tiles[osm_idx][1]
+
+            # fusion
+            sat = PIL.Image.open(
+                    os.path.join(self.sat_list[self.label[idx][pos_index]])
+                )
+            sat = sat.convert("RGB")
+            sat = self.satimage_transform(sat)
+            # end
+
+            if self.use_rendered_tiles:
+                osm_tile = np.array(Colormap.apply(osm_tile))
+                osm_tile = np.moveaxis(osm_tile, -1, 0)
+
+            # print(f'dimension is {osm_tile.shape}')
 
             if self.use_50_n_osm_tiles:
                 osm_tile = project_to_n(osm_tile)
@@ -207,6 +227,8 @@ class VIGORDataset(Dataset):
             [row_offset, col_offset] = self.delta[idx, pos_index]
             row_offset = np.round(row_offset / height_raw * height)
             col_offset = np.round(col_offset / width_raw * width)
+
+            osm_tile = torch.cat((sat, osm_tile), dim=0) # fusion
 
         else:
             if self.pos_only:  # load positives only

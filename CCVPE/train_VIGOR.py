@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--area', type=str, help='samearea or crossarea', default='samearea')
 parser.add_argument('--training', choices=('True','False'), default='True')
 parser.add_argument('--pos_only', choices=('True','False'), default='True')
-parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-3)
+parser.add_argument('-l', '--learning_rate', type=float, help='learning rate', default=1e-4)
 parser.add_argument('-b', '--batch_size', type=int, help='batch size', default=8)
 parser.add_argument('--weight_ori', type=float, help='weight on orientation loss', default=1e1)
 parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss', default=1e4)
@@ -50,17 +50,19 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + "test 50 n"
+label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + '_fixed_tile_index' + 'fusion_simple_concat'
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'
-use_adapt = True
+use_adapt = False
 
 if use_osm:
     label += '_osm'
+
+label += '_lastTiles' # final tile 
     
 print(f'model name {label}')
-writer = SummaryWriter(log_dir=os.path.join('runs', label))
+writer = SummaryWriter(log_dir=os.path.join('runs/fusion', label))
 
 if use_osm:
     prepare_osm_data(dataset_root)
@@ -112,7 +114,7 @@ else:
 
 if training:
     torch.cuda.empty_cache()
-    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=False)
+    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=True)
     
     CVM_model.to(device)
     for param in CVM_model.parameters():
