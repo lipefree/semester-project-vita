@@ -75,10 +75,14 @@ class VIGORDataset(Dataset):
             # load pickle file for given city
             if self.use_osm_tiles:
                 osm_tile_path = os.path.join(
-                    self.root, city, "osm_tiles", "data.pkl.gz"
+                    self.root, city, "osm_tiles", "data.npy"
                 )
-                with gzip.open(osm_tile_path, "rb") as f:
-                    loaded_data = pickle.load(f)
+                
+                with open(osm_tile_path, 'rb') as f:
+                    loaded_data = np.load(f)
+                    
+                # with gzip.open(osm_tile_path, "rb") as f:
+                #     loaded_data = pickle.load(f)
 
                 print(f"loaded data pikle")
                 self.osm_tiles.extend(loaded_data)
@@ -201,7 +205,7 @@ class VIGORDataset(Dataset):
             pos_index = 0
             osm_idx = self.label[idx][pos_index]
 
-            osm_tile: np.ndarray = self.osm_tiles[osm_idx][1]
+            osm_tile: np.ndarray = self.osm_tiles[osm_idx]
                
             if self.use_rendered_tiles:
                 osm_tile = np.array(Colormap.apply(osm_tile))
@@ -364,7 +368,7 @@ class VIGORDataset(Dataset):
         pos_index = 0
         osm_idx = self.label[idx][pos_index]
 
-        osm_tile: np.ndarray = self.osm_tiles[osm_idx][1]
+        osm_tile: np.ndarray = self.osm_tiles[osm_idx]
 
         osm_tile_tensor = torch.from_numpy(np.ascontiguousarray(osm_tile)).float()
 

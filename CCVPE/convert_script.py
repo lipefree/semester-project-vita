@@ -12,7 +12,7 @@ from vigor_osm_handler import *
 
 import os, pickle, gzip
 
-root = "../../VIGOR"
+root = '/scratch/izar/qngo/VIGOR'
 city = "NewYork"
 osm_tile_path = os.path.join(root, city, "osm_tiles", "data.pkl.gz")
 with gzip.open(osm_tile_path, "rb") as f:
@@ -26,5 +26,4 @@ for i, data in tqdm(enumerate(loaded_data)):
 
 npsave_tile_path = os.path.join(root, city, "osm_tiles", "data.npy")
 with open(npsave_tile_path, 'wb') as f:
-
     np.save(f, new_data)

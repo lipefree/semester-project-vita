@@ -53,7 +53,7 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + 'fusion_concat_image'
+label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + 'test_new_loader'
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'
@@ -102,7 +102,15 @@ if training is False and ori_noise==180: # load pre-defined random orientation f
         with open('crossarea_orientation_test.npy', 'rb') as f:
             random_orientation = np.load(f)
 
-vigor = VIGORDataset(dataset_root, split=area, train=training, pos_only=pos_only, transform=(transform_grd, transform_sat), ori_noise=ori_noise, use_osm_tiles=use_osm, use_50_n_osm_tiles=use_adapt, use_concat=use_concat)
+vigor = VIGORDataset(dataset_root, 
+                     split=area, 
+                     train=training, 
+                     pos_only=pos_only, 
+                     transform=(transform_grd, transform_sat), 
+                     ori_noise=ori_noise, 
+                     use_osm_tiles=use_osm, 
+                     use_50_n_osm_tiles=use_adapt, 
+                     use_concat=use_concat)
 
 if training is True:
     dataset_length = int(vigor.__len__())
