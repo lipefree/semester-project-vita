@@ -159,11 +159,11 @@ def get_osm_raster(latlong: tuple[float, float]) -> np.ndarray:
     # Orienternet black box magic but we do get our osm tile (canvas.raster) at the end
 
     proj, bbox = process_latlong(
-        prior_latlon=latlong, tile_size_meters=VIGOR_TILE_SIZE / 2
+        prior_latlon=latlong, tile_size_meters=VIGOR_TILE_SIZE / 2 # type: ignore
     )
     ppm = 640 / 73  # To get 640x640 pixels at the end
     tiler = TileManager.from_bbox(proj, bbox, ppm)  # type: ignore
-    canvas = tiler.query(bbox)
+    canvas = tiler.query(bbox) # type: ignore
 
     return canvas.raster
 
