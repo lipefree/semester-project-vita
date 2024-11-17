@@ -49,4 +49,6 @@ def get_orientation_distance(gt_orientation, pred_orientation, loc_gt, loc_pred,
         else:
             angle_gt = math.degrees(a_acos_gt)
 
-    return np.min([np.abs(angle_gt-angle_pred), 360-np.abs(angle_gt-angle_pred)])
+        return np.min([np.abs(angle_gt-angle_pred), 360-np.abs(angle_gt-angle_pred)])
+    else:
+        return None

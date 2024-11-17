@@ -34,8 +34,10 @@ class VIGORDataset(Dataset):
         pos_only=True,
         ori_noise=180,
         random_orientation=None,
-        use_osm_tiles=True,
+        use_osm_tiles=False,
         use_50_n_osm_tiles=False,
+        use_osm_rendered=False,
+        use_concat=False,
     ):
         self.root = root
         self.label_root = label_root
@@ -46,7 +48,8 @@ class VIGORDataset(Dataset):
         self.random_orientation = random_orientation
         self.use_osm_tiles = use_osm_tiles  # If using osm tiles instead of sat images TODO: rework this to a more modular way
         self.use_50_n_osm_tiles = use_50_n_osm_tiles  # If we want to transform the osm tiles to 50 layers (corresponding to the 50 classes for OSM objects) TODO: this is really a bad way to do it
-        self.use_rendered_tiles = False
+        self.use_rendered_tiles = use_osm_rendered
+        self.use_concat = use_concat
 
         if transform != None:
             self.grdimage_transform = transform[0]
@@ -188,9 +191,9 @@ class VIGORDataset(Dataset):
             [
                 # resize
                 transforms.Resize([512, 512]),
-                # transforms.Normalize(
-                #     mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                # ),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
             ]
         )
 
@@ -199,15 +202,7 @@ class VIGORDataset(Dataset):
             osm_idx = self.label[idx][pos_index]
 
             osm_tile: np.ndarray = self.osm_tiles[osm_idx][1]
-
-            # fusion
-            sat = PIL.Image.open(
-                    os.path.join(self.sat_list[self.label[idx][pos_index]])
-                )
-            sat = sat.convert("RGB")
-            sat = self.satimage_transform(sat)
-            # end
-
+               
             if self.use_rendered_tiles:
                 osm_tile = np.array(Colormap.apply(osm_tile))
                 osm_tile = np.moveaxis(osm_tile, -1, 0)
@@ -228,7 +223,13 @@ class VIGORDataset(Dataset):
             row_offset = np.round(row_offset / height_raw * height)
             col_offset = np.round(col_offset / width_raw * width)
 
-            osm_tile = torch.cat((sat, osm_tile), dim=0) # fusion
+            if self.use_concat:
+                sat  = PIL.Image.open(
+                        os.path.join(self.sat_list[self.label[idx][pos_index]])
+                    )
+                sat = sat.convert("RGB")
+                sat = self.satimage_transform(sat)
+                osm_tile = torch.cat((sat, osm_tile), dim=0) # fusion
 
         else:
             if self.pos_only:  # load positives only
@@ -317,6 +318,58 @@ class VIGORDataset(Dataset):
             # print(f'sat tile : {sat}')
             # print(f'max of a sat {sat.max()}')
             return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
+
+    def get_item_sat(self, idx):
+        '''
+           Helper function since when we use osm mode or fusion mode, we can't get both 
+
+           It may change since fusion is supposed to be done in the model 
+        '''
+        if self.pos_only:  # load positives only
+            pos_index = 0
+            sat = PIL.Image.open(
+                os.path.join(self.sat_list[self.label[idx][pos_index]])
+            )
+        else:  # load positives and semi-positives
+            col_offset = 320
+            row_offset = 320
+            while (
+                np.abs(col_offset) >= 320 or np.abs(row_offset) >= 320
+            ):  # do not use the semi-positives where GT location is outside the image
+                pos_index = random.randint(0, 3)
+                sat = PIL.Image.open(
+                    os.path.join(self.sat_list[self.label[idx][pos_index]])
+                )
+                [row_offset, col_offset] = self.delta[
+                    idx, pos_index
+                ]  # delta = [delta_lat, delta_lon]
+
+        sat = sat.convert("RGB")
+        width_raw, height_raw = sat.size
+
+        sat = self.satimage_transform(sat)
+        return sat
+
+    def get_item_osm(self, idx):
+        '''
+           Same as 'get_item_sat' but for osm 
+        '''
+        transform_osm_tile = transforms.Compose(
+            [
+                # resize
+                transforms.Resize([512, 512]),
+            ]
+        )
+
+        pos_index = 0
+        osm_idx = self.label[idx][pos_index]
+
+        osm_tile: np.ndarray = self.osm_tiles[osm_idx][1]
+
+        osm_tile_tensor = torch.from_numpy(np.ascontiguousarray(osm_tile)).float()
+
+        osm_tile = transform_osm_tile(osm_tile_tensor)
+        return osm_tile
 
 
 # ---------------------------------------------------------------------------------

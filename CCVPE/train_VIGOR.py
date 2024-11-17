@@ -38,6 +38,9 @@ parser.add_argument('--weight_infoNCE', type=float, help='weight on infoNCE loss
 parser.add_argument('-f', '--FoV', type=int, help='field of view', default=360)
 parser.add_argument('--ori_noise', type=float, help='noise in orientation prior, 180 means unknown orientation', default=180.)
 parser.add_argument('--osm', choices=('True', 'False'), default='True')
+parser.add_argument('--osm_rendered', choices=('True', 'False'), default='True')
+parser.add_argument('--osm_50n', choices=('True', 'False'), default='False')
+parser.add_argument('--osm_concat', choices=('True', 'False'), default='False')
 dataset_root='/scratch/izar/qngo/VIGOR'
 
 args = vars(parser.parse_args())
@@ -50,19 +53,25 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + '_fixed_tile_index' + 'fusion_simple_concat'
+label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + 'fusion_concat_image'
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'
-use_adapt = False
+use_adapt = args['osm_50n'] == 'True' # 50 dim representation
+use_osm_rendered = args['osm_rendered'] == 'True' # Use rendered tiles, NOTE: 50n and rendered are not compatible
+use_concat = args['osm_concat'] # concat osm tiles and sat images into 6 channels
 
 if use_osm:
     label += '_osm'
 
-label += '_lastTiles' # final tile 
-    
+if use_osm_rendered and use_osm:
+    label += '_rendered_tile'
+
+if use_adapt:
+    label += '_50n'
+  
 print(f'model name {label}')
-writer = SummaryWriter(log_dir=os.path.join('runs/fusion', label))
+writer = SummaryWriter(log_dir=os.path.join('runs', label))
 
 if use_osm:
     prepare_osm_data(dataset_root)
@@ -71,12 +80,11 @@ if FoV == 360:
     circular_padding = True # apply circular padding along the horizontal direction in the ground feature extractor
 else:
     circular_padding = False
-    
+
 transform_grd = transforms.Compose([
     transforms.Resize([320, 640]),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    
 ])
 
 transform_sat = transforms.Compose([
@@ -94,10 +102,7 @@ if training is False and ori_noise==180: # load pre-defined random orientation f
         with open('crossarea_orientation_test.npy', 'rb') as f:
             random_orientation = np.load(f)
 
-if training:
-    random_orientation = np.zeros(90618)
-
-vigor = VIGORDataset(dataset_root, split=area, train=training, pos_only=pos_only, transform=(transform_grd, transform_sat), ori_noise=ori_noise, random_orientation=random_orientation, use_osm_tiles=use_osm, use_50_n_osm_tiles=use_adapt)
+vigor = VIGORDataset(dataset_root, split=area, train=training, pos_only=pos_only, transform=(transform_grd, transform_sat), ori_noise=ori_noise, use_osm_tiles=use_osm, use_50_n_osm_tiles=use_adapt, use_concat=use_concat)
 
 if training is True:
     dataset_length = int(vigor.__len__())
@@ -114,7 +119,7 @@ else:
 
 if training:
     torch.cuda.empty_cache()
-    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=True)
+    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=use_concat)
     
     CVM_model.to(device)
     for param in CVM_model.parameters():

@@ -4,3 +4,6 @@ CCVPE/experiments/*
 CCVPE/models/
 CCVPE/results/
 CCVPE/runs/
+CCVPE/figures
+CCVPE/old_runs
+CCVPE/.ipynb_checkpoints/
