@@ -19,11 +19,12 @@ with gzip.open(osm_tile_path, "rb") as f:
     loaded_data = pickle.load(f)
 
 name, m = loaded_data[0]
-new_data = np.zeros((len(loaded_data), 3, 640, 640))
+new_data = np.zeros((len(loaded_data), 3, 640, 640), dtype=np.int8)
 for i, data in tqdm(enumerate(loaded_data)):
     name, m = data
     new_data[i] = m
 
 npsave_tile_path = os.path.join(root, city, "osm_tiles", "data.npy")
 with open(npsave_tile_path, 'wb') as f:
+
     np.save(f, new_data)
