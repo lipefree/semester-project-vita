@@ -13,9 +13,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-from datasets import VIGORDataset
+from dual_datasets import VIGORDataset
 from losses import infoNCELoss, cross_entropy_loss, orientation_loss, loss_ccvpe
-from models import CVM_VIGOR as CVM
+from feat_fusion_models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
 from vigor_osm_handler import prepare_osm_data
 from dotenv import load_dotenv
@@ -53,7 +53,7 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + 'test_new_loader'
+label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + 'test_feat_fusion'
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'
@@ -143,9 +143,10 @@ if training:
         running_loss = 0.0
         CVM_model.train()
         for i, data in enumerate(train_dataloader, 0):
-            grd, sat, gt, gt_with_ori, gt_orientation, city, _ = data
+            grd, sat, osm, gt, gt_with_ori, gt_orientation, city, _ = data
             grd = grd.to(device)
             sat = sat.to(device)
+            osm = osm.to(device)
             gt = gt.to(device)
             gt_with_ori = gt_with_ori.to(device)
             gt_orientation = gt_orientation.to(device)
@@ -157,7 +158,7 @@ if training:
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            output = CVM_model(grd, sat)
+            output = CVM_model(grd, sat, osm)
 
             (
                 logits_flattened,

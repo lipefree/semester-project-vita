@@ -22,7 +22,6 @@ np.random.seed(0)
 # ---------------------------------------------------------------------------------
 # VIGOR
 
-
 class VIGORDataset(Dataset):
     def __init__(
         self,
