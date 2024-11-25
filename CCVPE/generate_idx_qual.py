@@ -50,6 +50,8 @@ transform_sat = transforms.Compose(
     ]
 )
 
+zero_ori = np.zeros(52605)
+
 vigor = VIGORDataset(
     dataset_root,
     split=area,
@@ -60,12 +62,13 @@ vigor = VIGORDataset(
     use_osm_tiles=use_osm,
     use_50_n_osm_tiles=use_adapt,
     use_concat=use_concat,
+    random_orientation=zero_ori
 )
 
 base_model_path = "/scratch/izar/qngo/models/VIGOR/"
 os.listdir(base_model_path)
 
-selected_model = "samearea_HFoV360_samearea_lr_1e-04_osm_rendered_tile"
+selected_model = "samearea_HFoV360_samearea_lr_1e-04normalized_osm_rendered_tile"
 select_epoch = str(9)
 
 test_model_path = os.path.join(
@@ -99,6 +102,10 @@ for i in tqdm(range(len(vigor))):
 # show_image(sat, grd, heatmap, loc_gt, loc_pred, sin_pred_dense, cos_pred_dense, sin_pred, cos_pred)
 # plt.savefig('figures/'+area+'_'+str(idx)+'_noise_in_orientation_'+str(ori_noise)+'.png', bbox_inches='tight', pad_inches=0)
 # print('Images are written to figures/')
-save_qual = os.path.join("/scratch/izar/qngo", "qualitative", selected_model, "distance_test.npy")
+save_qual = os.path.join("/scratch/izar/qngo", "qualitative", selected_model, "distance_test_new.npy")
+
+if not os.path.exists(os.path.join("/scratch/izar/qngo", "qualitative", selected_model)):
+    os.mkdir(os.path.join("/scratch/izar/qngo", "qualitative", selected_model))
+
 with open(save_qual, "wb") as f:
     np.save(f, distance_array)
