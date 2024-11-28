@@ -383,6 +383,7 @@ class CVM_VIGOR(nn.Module):
     def compute_matching_score(self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm):
         '''
             LMU component: rolling and matching part
+            TODO: use it once instead
         '''
         for i in range(20):
             sat_descriptor_map_rolled = torch.roll(x, shifts=-i*shift, dims=1)

@@ -21,6 +21,7 @@ from vigor_osm_handler import prepare_osm_data
 from dotenv import load_dotenv
 from torch.utils.tensorboard import SummaryWriter
 from training_utils import get_meter_distance, get_orientation_distance, get_location
+import lightning as L
 
 torch.manual_seed(17)
 np.random.seed(0)
@@ -242,60 +243,59 @@ if training:
         distance = []
         orientation_error = []
         running_loss_validation = []
-        with torch.no_grad(): # fix this
-            for i, data in enumerate(val_dataloader, 0):
-                grd, sat, osm, gt, gt_with_ori, gt_orientation, city, _ = data
-                grd = grd.to(device)
-                sat = sat.to(device)
-                osm = osm.to(device)
-                gt = gt.to(device)
-                gt_with_ori = gt_with_ori.to(device)
-                gt_orientation = gt_orientation.to(device)
+        for i, data in enumerate(val_dataloader, 0):
+            grd, sat, osm, gt, gt_with_ori, gt_orientation, city, _ = data
+            grd = grd.to(device)
+            sat = sat.to(device)
+            osm = osm.to(device)
+            gt = gt.to(device)
+            gt_with_ori = gt_with_ori.to(device)
+            gt_orientation = gt_orientation.to(device)
 
-                grd_width = int(grd.size()[3] * FoV / 360)
-                grd_FoV = grd[:, :, :, :grd_width]
-                output = CVM_model(grd, sat, osm)
+            grd_width = int(grd.size()[3] * FoV / 360)
+            grd_FoV = grd[:, :, :, :grd_width]
+            output = CVM_model(grd, sat, osm)
 
-                (
-                    logits_flattened,
-                    heatmap,
-                    ori,
-                    matching_score_stacked,
-                    matching_score_stacked2,
-                    matching_score_stacked3,
-                    matching_score_stacked4,
-                    matching_score_stacked5,
-                    matching_score_stacked6,
-                ) = output
+            (
+                logits_flattened,
+                heatmap,
+                ori,
+                matching_score_stacked,
+                matching_score_stacked2,
+                matching_score_stacked3,
+                matching_score_stacked4,
+                matching_score_stacked5,
+                matching_score_stacked6,
+            ) = output
 
-                loss_validation = loss_ccvpe(
-                    output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
+            loss_validation = loss_ccvpe(
+                output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
+            )
+            running_loss_validation.append(loss_validation.item())
+
+            gt = gt.cpu().detach().numpy()
+            gt_with_ori = gt_with_ori.cpu().detach().numpy()
+            gt_orientation = gt_orientation.cpu().detach().numpy()
+            heatmap = heatmap.cpu().detach().numpy()
+            ori = ori.cpu().detach().numpy()
+            for batch_idx in range(gt.shape[0]):
+                loc_pred = get_location(heatmap[batch_idx, :, :, :])
+                loc_gt = get_location(gt[batch_idx, :, :, :])
+                meter_distance = get_meter_distance(
+                    loc_gt, loc_pred, city[batch_idx], batch_idx
                 )
-                running_loss_validation.append(loss_validation.item())
+                distance.append(meter_distance)
 
-                gt = gt.cpu().detach().numpy()
-                gt_with_ori = gt_with_ori.cpu().detach().numpy()
-                gt_orientation = gt_orientation.cpu().detach().numpy()
-                heatmap = heatmap.cpu().detach().numpy()
-                ori = ori.cpu().detach().numpy()
-                for batch_idx in range(gt.shape[0]):
-                    loc_pred = get_location(heatmap[batch_idx, :, :, :])
-                    loc_gt = get_location(gt[batch_idx, :, :, :])
-                    meter_distance = get_meter_distance(
-                        loc_gt, loc_pred, city[batch_idx], batch_idx
-                    )
-                    distance.append(meter_distance)
+                orientation_distance = get_orientation_distance(
+                    gt_orientation, ori, loc_gt, loc_pred, batch_idx
+                )
 
-                    orientation_distance = get_orientation_distance(
-                        gt_orientation, ori, loc_gt, loc_pred, batch_idx
-                    )
+                if orientation_distance is not None:
+                    orientation_error.append(orientation_distance)
 
-                    if orientation_distance is not None:
-                        orientation_error.append(orientation_distance)
-
-            writer.add_scalar("Loss/Validation", np.mean(running_loss_validation), epoch)
-            mean_distance_error = np.mean(distance)
-            writer.add_scalar("Validation/mean_distance", mean_distance_error, epoch)
+        writer.add_scalar("Loss/Validation", np.mean(running_loss_validation), epoch)
+        mean_distance_error = np.mean(distance)
+        writer.add_scalar("Validation/mean_distance", mean_distance_error, epoch)
         print(
             "epoch: ",
             epoch,
