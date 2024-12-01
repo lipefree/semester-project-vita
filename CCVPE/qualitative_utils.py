@@ -6,30 +6,25 @@ import os
 # os.environ["NUMEXPR_NUM_THREADS"] = "4"
 # os.environ["OMP_NUM_THREADS"] = "4"
 
-import argparse
-from torch.utils.data import Dataset
 from torchvision import transforms
 import torch
-import torch.nn as nn
 import numpy as np
 import math
-from models import CVM_VIGOR as CVM
-from datasets import VIGORDataset
-import PIL.Image
-from PIL import ImageFile
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 from training_utils import *
 
 
 def run_infer(idx, dataset, model, device):
-    grd, sat, gt, _, orientation, city, _ = dataset.__getitem__(idx)
+    grd, sat, osm, gt, _, orientation, city, _ = dataset.__getitem__(idx)
 
     grd_feed = grd.unsqueeze(0)
     sat_feed = sat.unsqueeze(0)
+    osm_feed = osm.unsqueeze(0)
 
     grd_feed = grd_feed.to(device)
     sat_feed = sat_feed.to(device)
+    osm_feed = osm_feed.to(device)
 
     invTrans = transforms.Compose(
         [
@@ -53,7 +48,7 @@ def run_infer(idx, dataset, model, device):
         matching_score_stacked4,
         matching_score_stacked5,
         matching_score_stacked6,
-    ) = model(grd_feed, sat_feed)
+    ) = model(grd_feed, sat_feed, osm_feed)
     matching_score_max1, _ = torch.max(matching_score_stacked, dim=1, keepdim=True)
     matching_score_max2, _ = torch.max(matching_score_stacked2, dim=1, keepdim=True)
     matching_score_max3, _ = torch.max(matching_score_stacked3, dim=1, keepdim=True)

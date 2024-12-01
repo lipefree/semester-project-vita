@@ -70,7 +70,7 @@ if use_osm_rendered and use_osm:
 if use_adapt:
     label += '_50n'
 
-label += 'feature_fusion'
+label += 'feature_fusion_v2'
   
 print(f'model name {label}')
 writer = SummaryWriter(log_dir=os.path.join('runs', label))

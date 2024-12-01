@@ -61,8 +61,8 @@ use_adapt = args['osm_50n'] == 'True' # 50 dim representation
 use_osm_rendered = args['osm_rendered'] == 'True' # Use rendered tiles, NOTE: 50n and rendered are not compatible
 use_concat = args['osm_concat'] == 'True' # concat osm tiles and sat images into 6 channels
 
-label += 'deformable_attention_feature_fusion'
-  
+label += 'deformable_attention_feature_fusion_v2_mlp'
+
 print(f'model name {label}')
 writer = SummaryWriter(log_dir=os.path.join('runs', label))
 
@@ -218,8 +218,8 @@ if training:
     
                 print(f'[{epoch}, {i + 1:5d}] loss: {np.mean(running_loss):.3f}')
                 running_loss = 0.0
-                
-        writer.flush()
+                writer.flush()
+
         scratch_path = '/scratch/izar/qngo'
         model_name = 'models/VIGOR/'+label+'/' + str(epoch) + '/'
         model_dir = os.path.join(scratch_path, model_name)

@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-from models import CVM_VIGOR as CVM
-from datasets import VIGORDataset
+from feat_fusion_models import CVM_VIGOR as CVM
+from dual_datasets import VIGORDataset
 import PIL.Image
 from PIL import ImageFile
 import matplotlib.pyplot as plt
@@ -68,12 +68,13 @@ vigor = VIGORDataset(
 base_model_path = "/scratch/izar/qngo/models/VIGOR/"
 os.listdir(base_model_path)
 
-selected_model = "samearea_HFoV360_samearea_lr_1e-04normalized_osm_rendered_tile"
-select_epoch = str(9)
+selected_model = "samearea_HFoV360_samearea_lr_1e-04_osm_rendered_tilefeature_fusion"
+select_epoch = str(4)
 
 test_model_path = os.path.join(
     base_model_path, selected_model, select_epoch, "model.pt"
 )
+
 torch.cuda.empty_cache()
 CVM_model = CVM(device, ori_noise, use_adapt=use_adapt, use_concat=False)
 CVM_model.load_state_dict(torch.load(test_model_path))
