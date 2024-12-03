@@ -44,12 +44,13 @@ def double_conv(in_channels, out_channels):
 
 
 class CVM_VIGOR(nn.Module):
-    def __init__(self, device, circular_padding, use_adapt, use_concat):
+    def __init__(self, device, circular_padding, use_adapt, use_concat, use_mlp=False):
         super(CVM_VIGOR, self).__init__()
         self.device = device
         self.circular_padding = circular_padding
         self.use_adapt = use_adapt  # If using osm tiles with 50 layers
         self.use_concat = use_concat  # If using simple fusion with concat
+        self.use_mlp = use_mlp
 
         self.adapt_concat = nn.Sequential(
             nn.Conv2d(in_channels=6, out_channels=3, kernel_size=3, padding=1),
@@ -208,11 +209,10 @@ class CVM_VIGOR(nn.Module):
             ]
         )
 
-        # use this instead : https://github.com/facebookresearch/Mask2Former/blob/main/mask2former/modeling/pixel_decoder/ops/modules/ms_deform_attn.py
         self.query_dim = 256
         self.num_query = self.query_dim**2
 
-        self.embed_dims = 128
+        self.embed_dims = 256
         num_levels = 5
         self.deformable_attention_sat = MultiScaleDeformableAttention(
             embed_dims=self.embed_dims,
@@ -389,6 +389,7 @@ class CVM_VIGOR(nn.Module):
         osm_feature_volume, multiscale_osm = (
             self.osm_efficientnet.extract_features_multiscale(osm)
         )
+
         osm_feature_block0 = multiscale_osm[0]  # [16, 256, 256]
         osm_feature_block2 = multiscale_osm[2]  # [24, 128, 128]
         osm_feature_block4 = multiscale_osm[4]  # [40, 64, 64]
@@ -444,21 +445,22 @@ class CVM_VIGOR(nn.Module):
             level_start_index=osm_level_start_index,
         )  # Shape: [batch, num_queries, embed_dims]
 
-        # Concatenate the flattened attention outputs along the embedding dimension
-        fused_flat = torch.cat(
-            [sat_attention_output, osm_attention_output], dim=-1
-        )  # [batch, num_queries, 2 * embed_dims]
+        if self.use_mlp:
+            # Concatenate the flattened attention outputs along the embedding dimension
+            fused_flat = torch.cat([sat_attention_output, osm_attention_output], dim=-1)  # [batch, num_queries, 2 * embed_dims]
 
-        # Apply the MLP to the concatenated flattened features
-        fused_flat_fused = self.fusion_mlp(
-            fused_flat
-        )  # [batch, num_queries, embed_dims]
+            # Apply the MLP to the concatenated flattened features
+            fused_flat_fused = self.fusion_mlp(fused_flat)  # [batch, num_queries, embed_dims]
 
-        # Reshape back into spatial format
-        fused_output = fused_flat_fused.transpose(1, 2).view(
-            -1, self.embed_dims, self.query_dim, self.query_dim
-        )  # [batch, embed_dims, query_dim, query_dim]
+            # Reshape back into spatial format
+            fused_output = fused_flat_fused.transpose(1, 2).view(-1, self.embed_dims, self.query_dim, self.query_dim)  # [batch, embed_dims, query_dim, query_dim]
+        else:
+            # Reshape attention outputs to image-like format [batch, embed_dims, query_dim, query_dim]
+            sat_attention_reshaped = sat_attention_output.transpose(1, 2).view(-1, self.embed_dims, self.query_dim, self.query_dim)
+            osm_attention_reshaped = osm_attention_output.transpose(1, 2).view(-1, self.embed_dims, self.query_dim, self.query_dim)
 
+            fused_output = torch.add(sat_attention_reshaped, osm_attention_reshaped)
+        
         # Now we need to create the conv net to match for multi-scale
         fuse_feature_block0 = self.conv_block0(fused_output)
         fuse_feature_block2 = self.conv_block2(fuse_feature_block0)
@@ -532,8 +534,10 @@ class CVM_VIGOR(nn.Module):
             ],
             dim=1,
         )
+
         for level, fuse_feature_block in enumerate(fuse_feature_blocks):
             x_ori = self.orientation_decoder(level, x_ori, fuse_feature_block)
+
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)
 
         return (logits_flattened, heatmap, x_ori) + tuple(matching_score_stacked_list)
@@ -636,7 +640,7 @@ class CVM_VIGOR(nn.Module):
         fuse_des_len = x.size()[1]
         grd_map_norm = torch.norm(grd_descriptor_map, p="fro", dim=1, keepdim=True)
 
-        shift = int(64 / ((level + 1) ** 2))
+        shift = int(64 / 2**level)
         matching_score_max, matching_score_stacked = self.compute_matching_score(
             shift, x, grd_des_len, grd_descriptor_map, grd_map_norm
         )
@@ -652,6 +656,7 @@ class CVM_VIGOR(nn.Module):
         return x, matching_score_stacked
 
     def orientation_decoder(self, level, x_ori, fuse_feature_block):
+        
         x_ori = self.deconvs_ori[level](x_ori)
         if fuse_feature_block is not None:
             x_ori = torch.cat([x_ori, fuse_feature_block], dim=1)
