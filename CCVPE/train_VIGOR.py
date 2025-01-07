@@ -23,7 +23,7 @@ from torch.utils.tensorboard import SummaryWriter
 from training_utils import get_meter_distance, get_orientation_distance, get_location
 
 torch.manual_seed(17)
-np.random.seed(0)
+np.random.seed(1)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 "The device is: {}".format(device)
 
@@ -41,7 +41,7 @@ parser.add_argument('--osm', choices=('True', 'False'), default='True')
 parser.add_argument('--osm_rendered', choices=('True', 'False'), default='True')
 parser.add_argument('--osm_50n', choices=('True', 'False'), default='False')
 parser.add_argument('--osm_concat', choices=('True', 'False'), default='False')
-dataset_root='/scratch/izar/qngo/VIGOR'
+dataset_root='/work/vita/qngo/VIGOR'
 
 args = vars(parser.parse_args())
 area = args['area']
@@ -53,7 +53,7 @@ training = args['training'] == 'True'
 pos_only = args['pos_only'] == 'True'
 FoV = args['FoV']
 pos_only = args['pos_only']
-label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e') + 'test_new_loader'
+label = area + '_HFoV' + str(FoV) + "_" + area + "_lr_" + format(learning_rate, '.0e')
 ori_noise = args['ori_noise']
 ori_noise = 18 * (ori_noise // 18) # round the closest multiple of 18 degrees within prior 
 use_osm = args['osm'] == 'True'
@@ -69,7 +69,9 @@ if use_osm_rendered and use_osm:
 
 if use_adapt:
     label += '_50n'
-  
+
+label = 'osm_only_seed1'
+
 print(f'model name {label}')
 writer = SummaryWriter(log_dir=os.path.join('runs', label))
 
@@ -108,8 +110,9 @@ vigor = VIGORDataset(dataset_root,
                      pos_only=pos_only, 
                      transform=(transform_grd, transform_sat), 
                      ori_noise=ori_noise, 
-                     use_osm_tiles=use_osm, 
-                     use_50_n_osm_tiles=use_adapt, 
+                     use_osm_tiles=True, 
+                     use_50_n_osm_tiles=use_adapt,
+                     use_osm_rendered=True,
                      use_concat=use_concat)
 
 if training is True:
@@ -127,7 +130,7 @@ else:
 
 if training:
     torch.cuda.empty_cache()
-    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=use_concat)
+    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=use_concat, use_osm=True)
     
     CVM_model.to(device)
     for param in CVM_model.parameters():
@@ -139,7 +142,7 @@ if training:
     global_step = 0
     # with torch.autograd.set_detect_anomaly(True):
 
-    for epoch in range(15):  # loop over the dataset multiple times
+    for epoch in range(20):  # loop over the dataset multiple times
         running_loss = 0.0
         CVM_model.train()
         for i, data in enumerate(train_dataloader, 0):
@@ -157,7 +160,7 @@ if training:
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            output = CVM_model(grd, sat)
+            output = CVM_model(grd, sat, sat)
 
             (
                 logits_flattened,
@@ -226,7 +229,7 @@ if training:
                 running_loss = 0.0
                 
         writer.flush()
-        scratch_path = '/scratch/izar/qngo'
+        scratch_path = '/work/vita/qngo'
         model_name = 'models/VIGOR/'+label+'/' + str(epoch) + '/'
         model_dir = os.path.join(scratch_path, model_name)
         if not os.path.exists(model_dir):
@@ -249,7 +252,7 @@ if training:
 
             grd_width = int(grd.size()[3] * FoV / 360)
             grd_FoV = grd[:, :, :, :grd_width]
-            output = CVM_model(grd, sat)
+            output = CVM_model(grd, sat, sat)
 
             (
                 logits_flattened,

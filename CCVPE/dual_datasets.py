@@ -78,7 +78,7 @@ class VIGORDataset(Dataset):
                 )
                 
                 with open(osm_tile_path, 'rb') as f:
-                    loaded_data = np.load(f)
+                    loaded_data = np.load(f )
                     
                 # with gzip.open(osm_tile_path, "rb") as f:
                 #     loaded_data = pickle.load(f)
@@ -177,6 +177,8 @@ class VIGORDataset(Dataset):
                 rotation = np.random.uniform(low=-rotation_range, high=rotation_range)
         else:
             rotation = self.random_orientation[idx] / 360
+
+        rotation=0
 
         grd = torch.roll(
             grd,
@@ -303,6 +305,8 @@ class VIGORDataset(Dataset):
         elif "Chicago" in self.grd_list[idx]:
             city = "Chicago"
 
+        # print(self.sat_list[self.label[idx][pos_index]])
+        # print("at idx ", idx)
         return grd, sat, osm_tile, gt, gt_with_ori, orientation, city, orientation_angle
 
     def get_item_sat(self, idx):

@@ -42,17 +42,32 @@ def loss_ccvpe(
     output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
 ) -> float:
 
-    (
-        logits_flattened,
-        heatmap,
-        ori,
-        matching_score_stacked,
-        matching_score_stacked2,
-        matching_score_stacked3,
-        matching_score_stacked4,
-        matching_score_stacked5,
-        matching_score_stacked6,
-    ) = output
+    
+    if(len(output) == 9 ):
+        (
+            logits_flattened,
+            heatmap,
+            ori,
+            matching_score_stacked,
+            matching_score_stacked2,
+            matching_score_stacked3,
+            matching_score_stacked4,
+            matching_score_stacked5,
+            matching_score_stacked6,
+        ) = output
+    else:
+        (   _,
+            logits_flattened,
+            heatmap,
+            ori,
+            matching_score_stacked,
+            matching_score_stacked2,
+            matching_score_stacked3,
+            matching_score_stacked4,
+            matching_score_stacked5,
+            matching_score_stacked6,
+        ) = output
+
 
     gt_bottleneck = nn.MaxPool2d(64, stride=64)(gt_with_ori)
     gt_bottleneck2 = nn.MaxPool2d(32, stride=32)(gt_with_ori)
@@ -105,3 +120,109 @@ def loss_ccvpe(
     )
     loss = loss_ce + weighted_infoNCE + weight_ori * loss_ori
     return loss
+
+
+def loss_router(weight, logits, gt_choice, sat_dist, osm_dist, t) -> float:
+
+    # Binary cross-entropy loss
+    ce_loss = nn.CrossEntropyLoss(weight=weight, reduction='none')
+    loss1 = ce_loss(logits, gt_choice)  # Binary classification loss for routing decision
+
+    # print(f'chosen {chosen}')
+
+    # Difference in distances scaled by the routing decision
+
+    distance = torch.abs(sat_dist - osm_dist)
+    mask = (distance >= -1).float()
+    
+    # distance = torch.clamp(distance, max=50) # sometimes the distance is over 200 which is too much
+
+    # loss2 = torch.exp(torch.div(distance, 5))
+
+    # loss2 = distance * 0.0125
+
+    # d = 0 -> 1
+    # d = 40 -> 1.5
+    # a*40 + 1 = 1.5 
+    # a = 0.5/40 = 0.0125
+    loss2 = torch.sigmoid(distance - t)
+
+    # print(f'loss 2 {loss2}')
+    return loss1, loss2
+
+def get_distances(gt, osm_heatmap, sat_heatmap, city):
+    gt_pred = get_max_coordinates(gt)
+
+    # print(f'gt coordinates {gt_pred}')
+    # First we need to define what is the label
+    # print(f'osm_heatmap shape {osm_heatmap.size()}')
+    # print(f'gt shape {gt.size()}')
+    osm_pred = get_max_coordinates(osm_heatmap)
+    # print(f'osm coordinates {osm_pred}')
+    # print(f'predicted shape {osm_pred.size()}')
+    # print(f'pred {osm_pred}')
+    osm_dist = distance(osm_pred, gt_pred, city)
+    # print(f'osm dist {osm_dist}')
+
+    sat_pred = get_max_coordinates(sat_heatmap)
+    # print(f'sat coordinates {sat_pred}')
+    sat_dist = distance(sat_pred, gt_pred, city)
+
+    # print(f'osm dist {osm_dist}')
+    # print(f'sat dist {sat_dist}')
+
+    gt_choices = (sat_dist > osm_dist).float() # This means : 0 when sat is better, smaller dist is better (closer to gt)
+    # gt_choices = gt_choices.unsqueeze(1)
+
+    # print(f'gt_choices {gt_choices}')
+
+    return gt_choices, sat_dist, osm_dist
+
+def distance(x, y, city):
+    
+    CITY_SCALE = {
+        'NewYork':       0.113248,
+        'Seattle':       0.100817,
+        'SanFrancisco':  0.118141,
+        'Chicago':       0.111262
+    }
+
+    pixel_distance = torch.sqrt((x[:,1]-y[:,1])**2+(x[:,0]-y[:,0])**2)
+    scale_list = []
+
+    for c in city:
+        if c in CITY_SCALE:
+            scale_list.append(CITY_SCALE[c])
+        else:
+            scale_list.append(CITY_SCALE['NewYork'])
+
+    scale_t = torch.tensor(scale_list, dtype=pixel_distance.dtype, device=pixel_distance.device)
+    meter_distance = pixel_distance * scale_t / 512.0 * 640.0
+
+    return meter_distance
+     
+     
+
+def get_max_coordinates(heatmap):
+    """
+    Given a heatmap of shape (B, 1, H, W), return the (x, y) coordinates
+    of the max value in the grid for each batch using divmod.
+    
+    Args:
+        heatmap (torch.Tensor): Tensor of shape (B, 1, H, W)
+    
+    Returns:
+        torch.Tensor: Tensor of shape (B, 2) where each row is (x, y)
+    """
+    # Find the index of the max value for each batch
+    flat_indices = torch.argmax(heatmap.view(heatmap.size(0), -1), dim=1)
+
+    # Convert flat index to 2D coordinates
+    height, width = heatmap.shape[1], heatmap.shape[2]
+    y_coords = flat_indices // width  # Row indices
+    x_coords = flat_indices % width  # Column indices
+
+    # Combine coordinates into a tensor of shape (B, 2)
+    coordinates = torch.stack((x_coords, y_coords), dim=1)
+
+    return coordinates

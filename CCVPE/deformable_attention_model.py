@@ -212,7 +212,7 @@ class CVM_VIGOR(nn.Module):
         self.query_dim = 256
         self.num_query = self.query_dim**2
 
-        self.embed_dims = 256
+        self.embed_dims = 128
         num_levels = 5
         self.deformable_attention_sat = MultiScaleDeformableAttention(
             embed_dims=self.embed_dims,

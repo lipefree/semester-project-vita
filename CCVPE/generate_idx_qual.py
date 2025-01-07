@@ -6,14 +6,14 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-from feat_fusion_models import CVM_VIGOR as CVM
+from multiple_deformable_attention_model import CVM_VIGOR as CVM
 from dual_datasets import VIGORDataset
 import PIL.Image
 from PIL import ImageFile
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
-from training_utils import *
-from qualitative_utils import *
+from training_utils import get_location, get_orientation_distance
+from qualitative_utils import QualitativeUtils, get_meter_distance
 from tqdm import tqdm
 
 area = "samearea"
@@ -27,7 +27,7 @@ use_adapt = False
 training = False
 use_concat = False
 
-dataset_root = "/scratch/izar/qngo/VIGOR"
+dataset_root = "/work/vita/qngo/VIGOR"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.manual_seed(17)
@@ -52,6 +52,18 @@ transform_sat = transforms.Compose(
 
 zero_ori = np.zeros(52605)
 
+base_model_path = "/work/vita/qngo/models/VIGOR/"
+os.listdir(base_model_path)
+
+selected_model = "multiple2_lighter_deformable_attention"
+selected_epoch = 5
+print(f'compute mean distance on test for {selected_model}')
+
+torch.cuda.empty_cache()
+CVM_model = CVM(device, ori_noise, use_adapt=use_adapt, use_concat=False)
+
+qualitative_model = QualitativeUtils(CVM_model, selected_model, selected_epoch)
+
 vigor = VIGORDataset(
     dataset_root,
     split=area,
@@ -62,51 +74,50 @@ vigor = VIGORDataset(
     use_osm_tiles=use_osm,
     use_50_n_osm_tiles=use_adapt,
     use_concat=use_concat,
-    random_orientation=zero_ori
+    random_orientation=zero_ori,
+    use_osm_rendered=True
 )
-
-base_model_path = "/scratch/izar/qngo/models/VIGOR/"
-os.listdir(base_model_path)
-
-selected_model = "samearea_HFoV360_samearea_lr_1e-04_osm_rendered_tilefeature_fusion"
-select_epoch = str(4)
-
-test_model_path = os.path.join(
-    base_model_path, selected_model, select_epoch, "model.pt"
-)
-
-torch.cuda.empty_cache()
-CVM_model = CVM(device, ori_noise, use_adapt=use_adapt, use_concat=False)
-CVM_model.load_state_dict(torch.load(test_model_path))
-CVM_model.to(device)
-CVM_model.eval()
 
 distance_array = np.zeros(len(vigor))
 
-for i in tqdm(range(len(vigor))):
-    idx = i
-    (
-        city,
-        sat,
-        grd,
-        heatmap,
-        loc_gt,
-        loc_pred,
-        sin_pred_dense,
-        cos_pred_dense,
-        sin_pred,
-        cos_pred,
-    ) = run_infer(idx, vigor, CVM_model, device)
-    get_meter_distance(loc_pred, loc_gt, city, 0)
-    distance_array[i] = get_meter_distance(loc_pred, loc_gt, city, 0)
+# indexes = np.arange(len(vigor))
+# np.random.shuffle(indexes) # shuffling in debug will quickly approximate the mean
+
+distance_array = qualitative_model.run_infer_batch(vigor)
+
+# for i in tqdm(indexes):
+#     idx = i
+#     (
+#         city,
+#         sat,
+#         osm,
+#         grd,
+#         heatmap,
+#         loc_gt,
+#         loc_pred,
+#         sin_pred_dense,
+#         cos_pred_dense,
+#         sin_pred,
+#         cos_pred,
+#     ) = qualitative_model.run_infer(idx)
+#     distance_array[i] = get_meter_distance(loc_pred, loc_gt, city, 0)
+#     if i % 100 == 0:
+#         print(distance_array[distance_array > 0].mean()) # use for debug
 
 # show_image(sat, grd, heatmap, loc_gt, loc_pred, sin_pred_dense, cos_pred_dense, sin_pred, cos_pred)
 # plt.savefig('figures/'+area+'_'+str(idx)+'_noise_in_orientation_'+str(ori_noise)+'.png', bbox_inches='tight', pad_inches=0)
 # print('Images are written to figures/')
-save_qual = os.path.join("/scratch/izar/qngo", "qualitative", selected_model, "distance_test_new.npy")
+save_qual = os.path.join("/work/vita/qngo", "qualitative", selected_model, "distance_test_new.npy")
 
-if not os.path.exists(os.path.join("/scratch/izar/qngo", "qualitative", selected_model)):
-    os.mkdir(os.path.join("/scratch/izar/qngo", "qualitative", selected_model))
+if not os.path.exists(os.path.join("/work/vita/qngo", "qualitative", selected_model)):
+    os.mkdir(os.path.join("/work/vita/qngo", "qualitative", selected_model))
 
 with open(save_qual, "wb") as f:
     np.save(f, distance_array)
+
+# mean = np.mean(distance_array)
+# median = np.median(distance_array)
+
+# save_qual_res = os.path.join("/work/vita/qngo", "qualitative", selected_model, "test_quantitative_results.txt")
+# with open(save_qual_res, 'w') as f:
+#     f.write(f'mean in meter : {mean}, median in meter : {median}')

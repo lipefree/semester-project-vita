@@ -47,12 +47,13 @@ def double_conv(in_channels, out_channels):
     )
 
 class CVM_VIGOR(nn.Module):
-    def __init__(self, device, circular_padding, use_adapt, use_concat):
+    def __init__(self, device, circular_padding, use_adapt, use_concat, use_osm=True):
         super(CVM_VIGOR, self).__init__()
         self.device = device
         self.circular_padding = circular_padding
         self.use_adapt = use_adapt # If using osm tiles with 50 layers
         self.use_concat = use_concat # If using simple fusion with concat
+        self.use_osm = use_osm
 
         self.adapt_concat = nn.Sequential(
                 nn.Conv2d(in_channels=6, out_channels=3, kernel_size=3, padding=1),
@@ -159,7 +160,7 @@ class CVM_VIGOR(nn.Module):
                                    nn.ReLU(inplace=True),
                                    nn.Conv2d(16, 2, 3, stride=1, padding=1))
         
-    def forward(self, grd, sat):
+    def forward(self, grd, sat, osm):
         grd_feature_volume = self.grd_efficientnet.extract_features(grd)
         grd_descriptor1 = self.grd_feature_to_descriptor1(grd_feature_volume) # length 1280
         grd_descriptor2 = self.grd_feature_to_descriptor2(grd_feature_volume) # length 640
@@ -181,6 +182,9 @@ class CVM_VIGOR(nn.Module):
 
         if self.use_concat:
             sat = self.adapt_concat(sat)
+
+        if self.use_osm:
+            sat = osm
             
         sat_feature_volume, multiscale_sat = self.sat_efficientnet.extract_features_multiscale(sat)
         sat_feature_block0 = multiscale_sat[0] # [16, 256, 256]

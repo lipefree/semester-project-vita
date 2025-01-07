@@ -41,7 +41,7 @@ parser.add_argument('--osm', choices=('True', 'False'), default='True')
 parser.add_argument('--osm_rendered', choices=('True', 'False'), default='True')
 parser.add_argument('--osm_50n', choices=('True', 'False'), default='False')
 parser.add_argument('--osm_concat', choices=('True', 'False'), default='False')
-dataset_root='/scratch/izar/qngo/VIGOR'
+dataset_root='/work/vita/qngo/VIGOR'
 
 args = vars(parser.parse_args())
 area = args['area']
@@ -61,7 +61,7 @@ use_adapt = args['osm_50n'] == 'True' # 50 dim representation
 use_osm_rendered = args['osm_rendered'] == 'True' # Use rendered tiles, NOTE: 50n and rendered are not compatible
 use_concat = args['osm_concat'] == 'True' # concat osm tiles and sat images into 6 channels
 
-label += 'deformable_attention_feature_fusion_add_embeddims_256_mlp'
+label = 'deformable_attention_add'
 
 print(f'model name {label}')
 writer = SummaryWriter(log_dir=os.path.join('runs', label))
@@ -103,6 +103,7 @@ vigor = VIGORDataset(dataset_root,
                      ori_noise=ori_noise, 
                      use_osm_tiles=use_osm, 
                      use_50_n_osm_tiles=use_adapt, 
+                     use_osm_rendered=True,
                      use_concat=use_concat)
 
 if training is True:
@@ -220,7 +221,7 @@ if training:
                 running_loss = 0.0
                 writer.flush()
 
-        scratch_path = '/scratch/izar/qngo'
+        scratch_path = '/work/vita/qngo'
         model_name = 'models/VIGOR/'+label+'/' + str(epoch) + '/'
         model_dir = os.path.join(scratch_path, model_name)
         if not os.path.exists(model_dir):
