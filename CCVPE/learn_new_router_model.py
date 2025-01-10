@@ -55,13 +55,13 @@ class CVM_VIGOR(nn.Module):
         self.num_query = self.query_dim**2
         self.embed_dims = 256
 
-        # self.deformable_fusion = deformable_fusion(self.device, use_pyramid=False)
+        self.deformable_fusion = deformable_fusion(self.device, use_pyramid=False)
 
-        # self.learnable_Q = nn.Embedding(self.num_query, self.embed_dims)
+        self.learnable_Q = nn.Embedding(self.num_query, self.embed_dims)
 
-        # self.pe_layer = PositionEmbeddingSine(self.embed_dims // 2, normalize=True)
+        # self.pe_layer = PositionEmbeddingLearned(self.embed_dims)
 
-        # self.cross_da1 = deformable_cross_attention(self.device, query_dim=128)
+        self.cross_da1 = deformable_cross_attention(self.device, query_dim=128)
 
         self.osm_model = CVM(device, circular_padding, use_adapt, use_concat, use_osm=True)
         self.sat_model = CVM(device, circular_padding, use_adapt, use_concat, use_osm=False)
@@ -72,11 +72,11 @@ class CVM_VIGOR(nn.Module):
         sat_model_name = "samearea_HFoV360_samearea_lr_1e-04test_rendered_tile"
         sat_epoch = "5"
 
-        input_dim = 1280*2
+        input_dim = 256
         # hidden_dim = 640
         hidden_dim = 128
         # self.global_pool = nn.AdaptiveAvgPool1d((1))  # Reduce to (B, 256, 1)
-        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # Reduce to (B, 256, 1)
+        self.global_pool = nn.AdaptiveAvgPool1d((1))  # Reduce to (B, 256, 1)
         self.mlp = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
@@ -125,33 +125,66 @@ class CVM_VIGOR(nn.Module):
         ]
 
         batch_size = sat.size(0)  # Get batch size dynamically
-        # learnable_Q = self.learnable_Q.weight.unsqueeze(0).repeat(batch_size, 1, 1)
+        learnable_Q = self.learnable_Q.weight.unsqueeze(0).repeat(batch_size, 1, 1)
 
         # pos = self.pe_layer(learnable_Q)
 
         # print('pos size ', pos.size())
         # pos = pos.view(batch_size, self.num_query, self.embed_dims)
 
-        # fused_output  = self.cross_da1(learnable_Q, sat_features, osm_features, batch_size)
+        fused_output  = self.cross_da1(learnable_Q, sat_features, osm_features, batch_size)
 
-        # # Classification
-        # fused_output_perm = fused_output.permute(0, 2, 1)
+        # Classification
+        fused_output_perm = fused_output.permute(0, 2, 1)
 
-        # fused_output_perm = self.deformable_fusion(
-        #     osm_features, sat_features, batch_size,
-        #     # grd_features
-        # )
+        fused_output_perm = self.deformable_fusion(
+            osm_features, sat_features, batch_size,
+            # grd_features
+        )
 
-        concat = torch.concat((osm_feature_volume, sat_feature_volume), dim=1)
+        # concat = torch.concat((osm_feature_volume, sat_feature_volume), dim=1)
 
-        avg_pooling = self.global_pool(concat)
+        avg_pooling = self.global_pool(fused_output_perm)
 
         # Flatten to (B, 320)
         avg_pooling = avg_pooling.view(avg_pooling.size(0), -1)
         chosen = self.mlp(avg_pooling)
-        
-        output_osm = self.osm_model(grd, sat, osm)
+
         with torch.no_grad():
+            self.osm_model.eval()
+            self.sat_model.eval()
+            output_osm = self.osm_model(grd, sat, osm)
             output_sat = self.sat_model(grd, sat, osm)
+            print("is osm model training : " ,self.osm_model.training)
+
+        (   osm_logits_flattened,
+                osm_heatmap,
+                osm_ori,
+                osm_matching_score_stacked,
+                osm_matching_score_stacked2,
+                osm_matching_score_stacked3,
+                osm_matching_score_stacked4,
+                osm_matching_score_stacked5,
+                osm_matching_score_stacked6,
+            ) = output_osm
+
+        (   sat_logits_flattened,
+                sat_heatmap,
+                sat_ori,
+                sat_matching_score_stacked,
+                sat_matching_score_stacked2,
+                sat_matching_score_stacked3,
+                sat_matching_score_stacked4,
+                sat_matching_score_stacked5,
+                sat_matching_score_stacked6,
+            ) = output_sat
+
+
+        print('stacked ', osm_matching_score_stacked.size())
+        print('stacked2 ', osm_matching_score_stacked2.size())
+        print('stacked3 ', osm_matching_score_stacked3.size())
+        print('stacked4 ', osm_matching_score_stacked4.size())
+        print('stacked5 ', osm_matching_score_stacked5.size())
+        print('stacked6 ', osm_matching_score_stacked6.size())
 
         return chosen, output_osm, output_sat

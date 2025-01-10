@@ -63,8 +63,9 @@ use_osm_rendered = args['osm_rendered'] == 'True' # Use rendered tiles, NOTE: 50
 use_concat = args['osm_concat'] == 'True' # concat osm tiles and sat images into 6 channels
 
 # label = 'router_overfit_debug2'
-label = 'router_learnable_debug'
+label = 'score_stacked_debug'
 learning_rate = 1e-4
+batch_size = 4
 if os.path.exists(os.path.join('runs', label)) and "debug" not in label:
     raise Exception(f"name already taken {label}")
 
@@ -118,7 +119,7 @@ if training is True:
 
     print(f'data set lenght {dataset_length}')
     # val_indices = index_list[int(len(index_list)*0.9):]
-    val_indices = index_list[int(len(index_list)*0.9999):]
+    val_indices = index_list[:1]
     if (subset := False):
     # we can also load sub set according to a max dist : dist_sub_1.npy  dist_sub_2.npy  dist_sub_3.npy  dist_sub_5.npy  dist_sub_9.npy dist_sub_30cm.npy dist_sub_50cm.npy dist_sub_15cm.npy
         dists_path = '/work/vita/qngo/dists'
@@ -141,7 +142,7 @@ if training is True:
         print(f'difference is {len_before - len(train_indices)}')
 
     else:
-        train_indices = index_list[:20]
+        train_indices = index_list[:1]
 
     # val_indices = index_list[20:25]
     training_set = Subset(vigor, train_indices)
@@ -186,7 +187,6 @@ if training:
 
     distance = []
     window_size = 2000
-
     for epoch in range(10):  # loop over the dataset multiple times
         running_loss = 0.0
         CVM_model.train()
@@ -225,6 +225,8 @@ if training:
                 osm_matching_score_stacked5,
                 osm_matching_score_stacked6,
             ) = output_osm
+
+               
 
             (   sat_logits_flattened,
                 sat_heatmap,

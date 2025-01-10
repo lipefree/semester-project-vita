@@ -23,7 +23,7 @@ from torch.utils.tensorboard import SummaryWriter
 from training_utils import get_meter_distance, get_orientation_distance, get_location
 
 torch.manual_seed(17)
-np.random.seed(1)
+np.random.seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 "The device is: {}".format(device)
 torch.cuda.empty_cache()
@@ -62,7 +62,7 @@ use_adapt = args['osm_50n'] == 'True' # 50 dim representation
 use_osm_rendered = args['osm_rendered'] == 'True' # Use rendered tiles, NOTE: 50n and rendered are not compatible
 use_concat = args['osm_concat'] == 'True' # concat osm tiles and sat images into 6 channels
 
-label = '1self_2cross_seed1'
+label = '1cross_final'
 if os.path.exists(os.path.join('runs', label)) and "debug" not in label:
     raise Exception(f"name already taken {label}")
 

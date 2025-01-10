@@ -23,14 +23,14 @@ class deformable_fusion(nn.Module):
 
         self.learnable_Q = nn.Embedding(self.num_query, self.embed_dims)
 
-        # self.pe_layer = PositionEmbeddingLearned(self.device, self.query_dim, self.embed_dims)
+        self.pe_layer = PositionEmbeddingLearned(self.device, self.query_dim, self.embed_dims)
 
         self.cross_da1 = deformable_cross_attention(self.device, query_dim=128)
-        self.cross_da2 = deformable_cross_attention(self.device, query_dim=128)
+        # self.cross_da2 = deformable_cross_attention(self.device, query_dim=128)
         # self.cross_da3 = deformable_cross_attention(self.device, query_dim=128)
         # self.cross_da4 = deformable_cross_attention(self.device, query_dim=128)
 
-        self.self_da1 = deformable_self_attention(self.device, self.query_dim)
+        # self.self_da1 = deformable_self_attention(self.device, self.query_dim)
         # self.self_da2 = deformable_self_attention(self.device, self.query_dim)
 
         # self.cross_grd = deformable_cross_grd_attention(self.device, query_dim=128)
@@ -41,7 +41,7 @@ class deformable_fusion(nn.Module):
         pos = self.pe_layer(batch_size)
         pos = pos.view(batch_size, self.num_query, self.embed_dims)
 
-        learnable_Q = self.learnable_Q.unsqueeze(0).repeat(batch_size, 1, 1)
+        learnable_Q = self.learnable_Q.weight.unsqueeze(0).repeat(batch_size, 1, 1)
         
         fused_output  = self.cross_da1(learnable_Q + pos, sat_features, osm_features, batch_size)
 

@@ -178,8 +178,6 @@ class VIGORDataset(Dataset):
         else:
             rotation = self.random_orientation[idx] / 360
 
-        rotation=0
-
         grd = torch.roll(
             grd,
             (torch.round(torch.as_tensor(rotation) * grd.size()[2]).int()).item(),
