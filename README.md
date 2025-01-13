@@ -1,3 +1,13 @@
+Install requirements using : `pip install -r CCVPE/requirements.txt`
+
+Install openmmcv for deformable attention : `mim install mmcv`
+
+We have a different models that was implemented in the report. 
+To retrain them use : `python CCVPE/{model_name}_train.py`
+For example : `python CCVPE/multiple_deformable_attention_train.py`
+
+To run baselines on CCVPE on OSM tile or satellite image, you can use : `python CCVPE/train_VIGOR.py --osm={True,False}` 
+
 maploc files comes from https://github.com/facebookresearch/OrienterNet/tree/main
 
 CCVPE comes from https://github.com/tudelft-iv/CCVPE
