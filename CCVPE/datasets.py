@@ -278,6 +278,7 @@ class VIGORDataset(Dataset):
         sigma, mu = 4, 0.0
         gt[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2)))
         gt = torch.tensor(gt)
+        gt /= gt.sum() # normalization to make it a distribution
 
         if self.train:
             # find the ground truth orientation index, we use 20 orientation bins, and each bin is 18 degrees

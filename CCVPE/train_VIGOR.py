@@ -23,7 +23,7 @@ from torch.utils.tensorboard import SummaryWriter
 from training_utils import get_meter_distance, get_orientation_distance, get_location
 
 torch.manual_seed(17)
-np.random.seed(1)
+np.random.seed(0)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 "The device is: {}".format(device)
 
@@ -70,7 +70,7 @@ if use_osm_rendered and use_osm:
 if use_adapt:
     label += '_50n'
 
-label = 'osm_only_seed1'
+label = 'CCVPE'
 
 print(f'model name {label}')
 writer = SummaryWriter(log_dir=os.path.join('runs', label))
@@ -110,7 +110,7 @@ vigor = VIGORDataset(dataset_root,
                      pos_only=pos_only, 
                      transform=(transform_grd, transform_sat), 
                      ori_noise=ori_noise, 
-                     use_osm_tiles=True, 
+                     use_osm_tiles=use_osm, 
                      use_50_n_osm_tiles=use_adapt,
                      use_osm_rendered=True,
                      use_concat=use_concat)
@@ -130,11 +130,17 @@ else:
 
 if training:
     torch.cuda.empty_cache()
-    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=use_concat, use_osm=True)
+    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=use_concat, use_osm=use_osm)
     
     CVM_model.to(device)
     for param in CVM_model.parameters():
         param.requires_grad = True
+
+    # def apply_spectral_norm(module):
+    #     if isinstance(module, (nn.Conv2d, nn.Linear)):
+    #         torch.nn.utils.spectral_norm(module)
+
+    # CVM_model.apply(apply_spectral_norm)
 
     params = [p for p in CVM_model.parameters() if p.requires_grad]
     optimizer = torch.optim.Adam(params, lr=learning_rate, betas=(0.9, 0.999))
@@ -174,10 +180,12 @@ if training:
                 matching_score_stacked6,
             ) = output
 
-            loss = loss_ccvpe(
+            loss, loss_ce, loss_w = loss_ccvpe(
                 output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
             )
             writer.add_scalar("Loss/train", loss, global_step)
+            writer.add_scalar("Losses/cross_entropy", loss_ce, global_step)
+            writer.add_scalar("Losses/wasserstein", loss_w, global_step)
 
             loss.backward()
             optimizer.step()
@@ -266,7 +274,7 @@ if training:
                 matching_score_stacked6,
             ) = output
 
-            loss_validation = loss_ccvpe(
+            loss_validation, loss_ce_val, loss_w_val = loss_ccvpe(
                 output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
             )
             running_loss_validation.append(loss_validation.item())

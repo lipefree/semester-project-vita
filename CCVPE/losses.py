@@ -29,6 +29,28 @@ def cross_entropy_loss(logits, labels):
     return -torch.sum(labels * nn.LogSoftmax(dim=1)(logits)) / logits.size()[0]
 
 
+def wass_loss(heatmap, labels, gt_coords):
+    B, _, L, _ = heatmap.size()
+    D = heatmap
+    
+    # Create coordinate grid
+    device = heatmap.device
+    i = torch.arange(L, device=device).view(1, L, 1).repeat(B, 1, L)  # Row indices (B, L, L)
+    j = torch.arange(L, device=device).view(1, 1, L).repeat(B, L, 1)  # Column indices (B, L, L)
+    
+    # Ground truth coordinates
+    i_gt = gt_coords[:, 0].view(B, 1, 1)  # (B, 1, 1)
+    j_gt = gt_coords[:, 1].view(B, 1, 1)  # (B, 1, 1)
+    
+    # Compute distance map (d(i, j))
+    d = torch.sqrt((i - i_gt) ** 2 + (j - j_gt) ** 2)  # Shape (B, L, L)
+
+    # Compute Wasserstein loss
+    loss = (d * D).sum(dim=(1, 2))  # Batch-wise loss (sum over grid)
+    
+    # Average over the batch
+    return loss.mean()
+
 def orientation_loss(ori, gt_orientation, gt):
     return (
         torch.sum(
@@ -104,8 +126,10 @@ def loss_ccvpe(
         torch.flatten(matching_score_stacked6, start_dim=1),
         torch.flatten(gt_bottleneck6, start_dim=1),
     )
-    loss_ce = cross_entropy_loss(logits_flattened, gt_flattened)
 
+    loss_ce = cross_entropy_loss(logits_flattened, gt_flattened)
+    loss_w = wass_loss(heatmap, gt, get_max_coordinates(gt)) * 4
+    
     weighted_infoNCE = (
         weight_infoNCE
         * (
@@ -119,7 +143,7 @@ def loss_ccvpe(
         / 6
     )
     loss = loss_ce + weighted_infoNCE + weight_ori * loss_ori
-    return loss
+    return loss, loss_ce, loss_w
 
 
 def loss_router(weight, logits, gt_choice, sat_dist, osm_dist, t) -> float:
