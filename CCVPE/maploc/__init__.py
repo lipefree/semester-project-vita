@@ -3,7 +3,7 @@
 import logging
 from pathlib import Path
 
-import pytorch_lightning  # noqa: F401
+# import pytorch_lightning  # noqa: F401
 
 formatter = logging.Formatter(
     fmt="[%(asctime)s %(name)s %(levelname)s] %(message)s",
@@ -18,9 +18,9 @@ logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 logger.propagate = False
 
-pl_logger = logging.getLogger("pytorch_lightning")
-if len(pl_logger.handlers):
-    pl_logger.handlers[0].setFormatter(formatter)
+# pl_logger = logging.getLogger("pytorch_lightning")
+# if len(pl_logger.handlers):
+#     pl_logger.handlers[0].setFormatter(formatter)
 
 repo_dir = Path(__file__).parent.parent
 EXPERIMENTS_PATH = repo_dir / "experiments/"

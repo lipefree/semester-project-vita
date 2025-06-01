@@ -110,3 +110,51 @@ class InterPyramidMs(nn.Module):
 
         return pyramid_feature_block0, pyramid_feature_block2, pyramid_feature_block4, pyramid_feature_block10, pyramid_feature_block15, pyramid_feature_volume 
 
+
+class MultiMAEPyramidMs(nn.Module):
+    def __init__(self, embed_dims=256, query_dim=128):
+        super(MultiMAEPyramidMs, self).__init__()
+
+        self.embed_dims = embed_dims
+        self.query_dim = query_dim
+
+        # 256, 128, 128
+        self.pyramid_conv3 = nn.Sequential(
+            nn.Upsample(size=(128,128), mode='bilinear'),
+            nn.Conv2d(self.embed_dims, self.embed_dims, kernel_size=3, padding=1),
+            nn.LayerNorm([self.embed_dims, 128, 128])
+        )
+
+        # 256, 64, 64
+        self.pyramid_conv0 = nn.Sequential(
+            nn.Upsample(size=(64,64), mode='bilinear'),
+            nn.Conv2d(self.embed_dims, self.embed_dims, kernel_size=3, padding=1),
+            nn.LayerNorm([self.embed_dims, 64, 64])
+        )
+
+        # 256, 32, 32
+        self.pyramid_conv1 = nn.Sequential(
+            nn.Upsample(size=(32,32), mode='bilinear'),
+            nn.Conv2d(self.embed_dims, self.embed_dims, kernel_size=3, padding=1),
+            nn.LayerNorm([self.embed_dims, 32, 32])
+        )
+
+        # 256, 16, 16
+        self.pyramid_conv2 = nn.Sequential(
+            nn.Upsample(size=(16,16), mode='bilinear'),
+            nn.Conv2d(self.embed_dims, self.embed_dims, kernel_size=3, padding=1),
+            nn.LayerNorm([self.embed_dims, 16, 16])
+        )
+
+
+    def forward(self, features):
+        # features : [bs, 129, 768]
+        bs, num_tokens, dims = features.size()
+
+        # drop extra token
+        features = features[:, 1:, :]
+
+        # 128 = 8 x 16
+        features = features.transpose(1, 2).reshape(bs, dims, 8, 16) # shape: bs, 768, 8, 16
+
+        return self.pyramid_conv3(features), self.pyramid_conv0(features), self.pyramid_conv1(features), self.pyramid_conv2(features)

@@ -9,21 +9,18 @@ from model_utils.light_pyramid_ms import PyramidMs
 class deformable_fusion(nn.Module):
 
     def __init__(self, device, d_model=128, query_dim=128, use_pyramid=True):
-        super(deformable_fusion, self).__init__()
+        super().__init__()
 
         self.device = device
         self.query_dim = query_dim
         self.num_query = self.query_dim**2
         self.embed_dims = 256
         self.use_pyramid = use_pyramid
-        
-        # self.learnable_Q = nn.parameter.Parameter(
-        #     nn.init.kaiming_normal_(torch.zeros(1, self.num_query, self.embed_dims))
-        # )
-
         self.learnable_Q = nn.Embedding(self.num_query, self.embed_dims)
 
-        self.pe_layer = PositionEmbeddingLearned(self.device, self.query_dim, self.embed_dims)
+        self.pe_layer = PositionEmbeddingLearned(
+            self.device, self.query_dim, self.embed_dims
+        )
 
         self.cross_da1 = deformable_cross_attention(self.device, query_dim=128)
         # self.cross_da2 = deformable_cross_attention(self.device, query_dim=128)
@@ -37,13 +34,21 @@ class deformable_fusion(nn.Module):
         self.pyramid1 = PyramidMs(embed_dims=self.embed_dims, query_dim=self.query_dim)
         self.output_decoder = output_decoder()
 
-    def forward(self, osm_features, sat_features, batch_size, grd=None):
+    def forward(
+        self, osm_features, sat_features, batch_size, grd=None, alpha_hint=None
+    ):
         pos = self.pe_layer(batch_size)
         pos = pos.view(batch_size, self.num_query, self.embed_dims)
 
         learnable_Q = self.learnable_Q.weight.unsqueeze(0).repeat(batch_size, 1, 1)
-        
-        fused_output  = self.cross_da1(learnable_Q + pos, sat_features, osm_features, batch_size)
+
+        fused_output = self.cross_da1(
+            learnable_Q + pos,
+            sat_features,
+            osm_features,
+            batch_size,
+            alpha_hint=alpha_hint,
+        )
 
         # fused_output = self.self_da2(fused_output)
 
@@ -54,7 +59,9 @@ class deformable_fusion(nn.Module):
         # fused_output = self.self_da1(fused_output)
 
         if self.use_pyramid:
-            fused_output = fused_output.transpose(1, 2).view(-1, self.embed_dims, self.query_dim, self.query_dim)
+            fused_output = fused_output.transpose(1, 2).view(
+                -1, self.embed_dims, self.query_dim, self.query_dim
+            )
             p128, p64, p32, p16 = self.pyramid1(fused_output)
 
             return self.output_decoder(p128, p64, p32, p16)
@@ -69,28 +76,19 @@ class deformable_fusion(nn.Module):
             out.append(fused_feature + other_feature)
         return out
 
+
 class output_decoder(nn.Module):
     def __init__(self, embed_dims=256):
         super(output_decoder, self).__init__()
 
-        self.conv_volume = nn.Sequential(
-            nn.Conv2d(embed_dims, 1280, kernel_size=1)
-        )
-        self.conv16 = nn.Sequential(
-            nn.Conv2d(embed_dims, 320, kernel_size=1)
-        )
-        self.conv32 = nn.Sequential(
-            nn.Conv2d(embed_dims, 112, kernel_size=1)
-        )
-        self.conv64 = nn.Sequential(
-            nn.Conv2d(embed_dims, 40, kernel_size=1)
-        )
-        self.conv128 = nn.Sequential(
-            nn.Conv2d(embed_dims, 24, kernel_size=1)
-        )
+        self.conv_volume = nn.Sequential(nn.Conv2d(embed_dims, 1280, kernel_size=1))
+        self.conv16 = nn.Sequential(nn.Conv2d(embed_dims, 320, kernel_size=1))
+        self.conv32 = nn.Sequential(nn.Conv2d(embed_dims, 112, kernel_size=1))
+        self.conv64 = nn.Sequential(nn.Conv2d(embed_dims, 40, kernel_size=1))
+        self.conv128 = nn.Sequential(nn.Conv2d(embed_dims, 24, kernel_size=1))
         self.conv256 = nn.Sequential(
-            nn.Upsample(size=(256,256), mode="bilinear"),
-            nn.Conv2d(embed_dims, 16, kernel_size=1)
+            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Conv2d(embed_dims, 16, kernel_size=1),
         )
 
     def forward(self, p128, p64, p32, p16):
@@ -111,6 +109,7 @@ class normalization(nn.Module):
 
     def forward(self, x):
         return F.normalize(x, p=self.p, dim=self.dim)
+
 
 class deformable_cross_attention(nn.Module):
     def __init__(self, device, query_dim=128, dropout=0.1):
@@ -140,7 +139,7 @@ class deformable_cross_attention(nn.Module):
         self.learnable_Q = nn.parameter.Parameter(
             nn.init.kaiming_normal_(torch.zeros(1, self.num_query, self.embed_dims))
         )
-        
+
         # self.pe_layer = PositionEmbeddingLearned(self.device, self.query_dim, self.embed_dims)
 
         self.fuse_feature_to_descriptors = nn.Sequential(
@@ -165,16 +164,10 @@ class deformable_cross_attention(nn.Module):
         self.activation1 = nn.ReLU()
         self.linear2 = nn.Linear(hidden_dim, self.embed_dims)
         self.norm = nn.LayerNorm(self.embed_dims)
-
-        self.pyramid_ms = PyramidMs(self.embed_dims, self.query_dim)
-
         self.learnable_alpha = nn.Parameter(torch.tensor(0.0, requires_grad=True))
 
-    def forward(self, Q, sat_features, osm_features, batch_size):
+    def forward(self, Q, sat_features, osm_features, batch_size, alpha_hint=None):
 
-        # pos = self.pe_layer(batch_size)
-        # pos = pos.view(batch_size, self.num_query, self.embed_dims)
-        
         # MS deformable attention has particular inputs
         (
             sat_flattened,
@@ -213,11 +206,18 @@ class deformable_cross_attention(nn.Module):
             level_start_index=osm_level_start_index,
         )  # Shape: [batch, num_queries, embed_dims]
 
-        # Reshape attention outputs to image-like format [batch, embed_dims, query_dim, query_dim]
-        alpha = torch.sigmoid(self.learnable_alpha)
-        fused_output = torch.add(alpha* sat_attention_output,(1 - alpha) * osm_attention_output)
+        if alpha_hint is not None:
+            alpha = torch.sigmoid(torch.tensor(alpha_hint, device=self.device))
+        else:
+            alpha = torch.sigmoid(self.learnable_alpha)
+
+        fused_output = torch.add(
+            alpha * sat_attention_output, (1 - alpha) * osm_attention_output
+        )
         fused_output = fused_output + Q
-        fused_output = fused_output + self.norm(self.linear2(self.dropout1(self.activation1(self.linear1(fused_output)))))
+        fused_output = fused_output + self.norm(
+            self.linear2(self.dropout1(self.activation1(self.linear1(fused_output))))
+        )
 
         return fused_output
 
@@ -337,9 +337,7 @@ class deformable_cross_grd_attention(nn.Module):
             reference_points_grd,
             grd_spatial_shapes,
             grd_level_start_index,
-        ) = self.prepare_input_ms_deformable_attention(
-            grd, self.input_proj_list_grd
-        )
+        ) = self.prepare_input_ms_deformable_attention(grd, self.input_proj_list_grd)
 
         grd_attention_output = self.deformable_attention_grd(
             query=Q,
@@ -350,10 +348,11 @@ class deformable_cross_grd_attention(nn.Module):
             level_start_index=grd_level_start_index,
         )  # Shape: [batch, num_queries, embed_dims]
 
-
         # Reshape attention outputs to image-like format [batch, embed_dims, query_dim, query_dim]
         fused_output = grd_attention_output + Q
-        fused_output = fused_output + self.norm(self.linear2(self.dropout1(self.activation1(self.linear1(fused_output)))))
+        fused_output = fused_output + self.norm(
+            self.linear2(self.dropout1(self.activation1(self.linear1(fused_output))))
+        )
 
         return fused_output
 
@@ -450,9 +449,7 @@ class deformable_self_attention(nn.Module):
             reference_points_q,
             q_spatial_shapes,
             q_level_start_index,
-        ) = self.prepare_input_ms_deformable_attention(
-            q
-        )
+        ) = self.prepare_input_ms_deformable_attention(q)
 
         q_attention_output = self.deformable_attention(
             query=q,
@@ -464,7 +461,11 @@ class deformable_self_attention(nn.Module):
         )  # Shape: [batch, num_queries, embed_dims]
 
         q_attention_output = q_attention_output + q
-        q_attention_output = q_attention_output + self.norm(self.linear2(self.dropout1(self.activation1(self.linear1(q_attention_output)))))
+        q_attention_output = q_attention_output + self.norm(
+            self.linear2(
+                self.dropout1(self.activation1(self.linear1(q_attention_output)))
+            )
+        )
         return q_attention_output
 
     def prepare_input_ms_deformable_attention(self, features):

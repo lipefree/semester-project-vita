@@ -128,8 +128,8 @@ def loss_ccvpe(
     )
 
     loss_ce = cross_entropy_loss(logits_flattened, gt_flattened)
-    loss_w = wass_loss(heatmap, gt, get_max_coordinates(gt)) * 4
-    
+    # loss_w = wass_loss(heatmap, gt, get_max_coordinates(gt)) * 4
+
     weighted_infoNCE = (
         weight_infoNCE
         * (
@@ -143,7 +143,8 @@ def loss_ccvpe(
         / 6
     )
     loss = loss_ce + weighted_infoNCE + weight_ori * loss_ori
-    return loss, loss_ce, loss_w
+    # return loss, loss_ce, loss_w
+    return loss, loss_ce, weighted_infoNCE, weight_ori * loss_ori
 
 
 def loss_router(weight, logits, gt_choice, sat_dist, osm_dist, t) -> float:

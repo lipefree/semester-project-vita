@@ -62,7 +62,7 @@ use_adapt = args['osm_50n'] == 'True' # 50 dim representation
 use_osm_rendered = args['osm_rendered'] == 'True' # Use rendered tiles, NOTE: 50n and rendered are not compatible
 use_concat = args['osm_concat'] == 'True' # concat osm tiles and sat images into 6 channels
 
-label = '1cross_final'
+label = 'deformable_fusion_baseline_3ca'
 if os.path.exists(os.path.join('runs', label)) and "debug" not in label:
     raise Exception(f"name already taken {label}")
 
@@ -169,9 +169,13 @@ if training:
                 matching_score_stacked6,
             ) = output
 
-            loss = loss_ccvpe(
+            loss, loss_ce, loss_infonce, loss_ori = loss_ccvpe(
                 output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
             )
+
+            writer.add_scalar("Train/loss_ce", loss_ce, global_step)
+            writer.add_scalar("Train/loss_infonce", loss_infonce, global_step)
+            writer.add_scalar("Train/loss_ori", loss_ori, global_step)
             writer.add_scalar("Loss/train", loss, global_step)
 
             loss.backward()
@@ -237,6 +241,9 @@ if training:
         distance = []
         orientation_error = []
         running_loss_validation = []
+        running_loss_ce_validation = []
+        running_loss_infonce_validation = []
+        running_loss_ori_validation = []
         with torch.no_grad(): # fix this
             for i, data in enumerate(val_dataloader, 0):
                 grd, sat, osm, gt, gt_with_ori, gt_orientation, city, _ = data
@@ -263,10 +270,14 @@ if training:
                     matching_score_stacked6,
                 ) = output
 
-                loss_validation = loss_ccvpe(
+                loss_validation, loss_ce, loss_infonce, loss_ori = loss_ccvpe(
                     output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
                 )
+
                 running_loss_validation.append(loss_validation.item())
+                running_loss_ce_validation.append(loss_ce.item())
+                running_loss_infonce_validation.append(loss_infonce.item())
+                running_loss_ori_validation.append(loss_ori.item())
 
                 gt = gt.cpu().detach().numpy()
                 gt_with_ori = gt_with_ori.cpu().detach().numpy()
@@ -289,6 +300,9 @@ if training:
                         orientation_error.append(orientation_distance)
 
             writer.add_scalar("Loss/Validation", np.mean(running_loss_validation), epoch)
+            writer.add_scalar("Validation/loss_ce", np.mean(running_loss_ce_validation), epoch)
+            writer.add_scalar("Validation/loss_infonce", np.mean(running_loss_infonce_validation), epoch)
+            writer.add_scalar("Validation/loss_ori", np.mean(running_loss_ori_validation), epoch)
             mean_distance_error = np.mean(distance)
             writer.add_scalar("Validation/mean_distance", mean_distance_error, epoch)
         print(

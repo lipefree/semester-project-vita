@@ -36,40 +36,37 @@ class PositionEmbeddingLearned(nn.Module):
         ], dim=-1).unsqueeze(0).repeat(batch_size, 1, 1, 1)
         return pos
 
-# class PositionEmbeddingSine(nn.Module):
-#     """
-#     This is a more standard version of the position embedding, very similar to the one
-#     used by the Attention is all you need paper, generalized to work on images.
-#     """
-#     def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):
-#         super().__init__()
-#         self.num_pos_feats = num_pos_feats
-#         self.temperature = temperature
-#         self.normalize = normalize
-#         if scale is not None and normalize is False:
-#             raise ValueError("normalize should be True if scale is passed")
-#         if scale is None:
-#             scale = 2 * math.pi
-#         self.scale = scale
+class PositionEncodingSine(nn.Module):
+    """
+    This is a sinusoidal position encoding that generalized to 2-dimensional images
+    """
 
-#     def forward(self, tensor_list: NestedTensor):
-#         x = tensor_list.tensors
-#         mask = tensor_list.mask
-#         assert mask is not None
-#         not_mask = ~mask
-#         y_embed = not_mask.cumsum(1, dtype=torch.float32)
-#         x_embed = not_mask.cumsum(2, dtype=torch.float32)
-#         if self.normalize:
-#             eps = 1e-6
-#             y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
-#             x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
+    def __init__(self, d_model, max_shape=(256, 256)):
+        """
+        Args:
+            max_shape (tuple): for 1/8 featmap, the max length of 256 corresponds to 2048 pixels
+            temp_bug_fix (bool): As noted in this [issue](https://github.com/zju3dv/LoFTR/issues/41),
+                the original implementation of LoFTR includes a bug in the pos-enc impl, which has little impact
+                on the final performance. For now, we keep both impls for backward compatability.
+                We will remove the buggy impl after re-training all variants of our released models.
+        """
+        super().__init__()
 
-#         dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
-#         dim_t = self.temperature ** (2 * (dim_t // 2) / self.num_pos_feats)
+        pe = torch.zeros((d_model, *max_shape))
+        y_position = torch.ones(max_shape).cumsum(0).float().unsqueeze(0)
+        x_position = torch.ones(max_shape).cumsum(1).float().unsqueeze(0)
+        div_term = torch.exp(torch.arange(0, d_model//2, 2).float() * (-math.log(10000.0) / (d_model//2)))
+        div_term = div_term[:, None, None]  # [C//4, 1, 1]
+        pe[0::4, :, :] = torch.sin(x_position * div_term)
+        pe[1::4, :, :] = torch.cos(x_position * div_term)
+        pe[2::4, :, :] = torch.sin(y_position * div_term)
+        pe[3::4, :, :] = torch.cos(y_position * div_term)
 
-#         pos_x = x_embed[:, :, :, None] / dim_t
-#         pos_y = y_embed[:, :, :, None] / dim_t
-#         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-#         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-#         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-#         return pos
+        self.register_buffer('pe', pe.unsqueeze(0), persistent=False)  # [1, C, H, W]
+
+    def forward(self, x):
+        """
+        Args:
+            x: [N, C, H, W]
+        """
+        return x + self.pe[:, :, :x.size(2), :x.size(3)]

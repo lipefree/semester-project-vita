@@ -13,7 +13,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import math
-from datasets import VIGORDataset
+import random
+from dual_datasets import VIGORDataset
 from losses import infoNCELoss, cross_entropy_loss, orientation_loss, loss_ccvpe
 from models import CVM_VIGOR as CVM
 from models import CVM_VIGOR_ori_prior as CVM_with_ori_prior
@@ -70,7 +71,7 @@ if use_osm_rendered and use_osm:
 if use_adapt:
     label += '_50n'
 
-label = 'CCVPE'
+label = 'CCVPE_25-75_osm-sat'
 
 print(f'model name {label}')
 writer = SummaryWriter(log_dir=os.path.join('runs', label))
@@ -130,7 +131,7 @@ else:
 
 if training:
     torch.cuda.empty_cache()
-    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=use_concat, use_osm=use_osm)
+    CVM_model = CVM(device, circular_padding, use_adapt=use_adapt, use_concat=use_concat, use_osm=False)
     
     CVM_model.to(device)
     for param in CVM_model.parameters():
@@ -148,13 +149,17 @@ if training:
     global_step = 0
     # with torch.autograd.set_detect_anomaly(True):
 
-    for epoch in range(20):  # loop over the dataset multiple times
+    for epoch in range(100):  # loop over the dataset multiple times
         running_loss = 0.0
         CVM_model.train()
         for i, data in enumerate(train_dataloader, 0):
-            grd, sat, gt, gt_with_ori, gt_orientation, city, _ = data
+            grd, sat, osm, gt, gt_with_ori, gt_orientation, city, _ = data
+
+            # osm augmentation : 
+            sat = random.choices([osm, sat], weights=[1, 3])[0]
             grd = grd.to(device)
             sat = sat.to(device)
+            osm = osm.to(device)
             gt = gt.to(device)
             gt_with_ori = gt_with_ori.to(device)
             gt_orientation = gt_orientation.to(device)
@@ -166,7 +171,7 @@ if training:
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            output = CVM_model(grd, sat, sat)
+            output = CVM_model(grd, sat, osm)
 
             (
                 logits_flattened,
@@ -180,12 +185,11 @@ if training:
                 matching_score_stacked6,
             ) = output
 
-            loss, loss_ce, loss_w = loss_ccvpe(
+            loss, loss_ce, loss_infonce, loss_ori = loss_ccvpe(
                 output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
             )
             writer.add_scalar("Loss/train", loss, global_step)
             writer.add_scalar("Losses/cross_entropy", loss_ce, global_step)
-            writer.add_scalar("Losses/wasserstein", loss_w, global_step)
 
             loss.backward()
             optimizer.step()
@@ -251,16 +255,17 @@ if training:
         orientation_error = []
         running_loss_validation = []
         for i, data in enumerate(val_dataloader, 0):
-            grd, sat, gt, gt_with_ori, gt_orientation, city, _ = data
+            grd, sat, osm, gt, gt_with_ori, gt_orientation, city, _ = data
             grd = grd.to(device)
             sat = sat.to(device)
+            osm = osm.to(device)
             gt = gt.to(device)
             gt_with_ori = gt_with_ori.to(device)
             gt_orientation = gt_orientation.to(device)
 
             grd_width = int(grd.size()[3] * FoV / 360)
             grd_FoV = grd[:, :, :, :grd_width]
-            output = CVM_model(grd, sat, sat)
+            output = CVM_model(grd, sat, osm)
 
             (
                 logits_flattened,
@@ -274,7 +279,7 @@ if training:
                 matching_score_stacked6,
             ) = output
 
-            loss_validation, loss_ce_val, loss_w_val = loss_ccvpe(
+            loss_validation, loss_ce_val, loss_infoNCE, loss_ori = loss_ccvpe(
                 output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
             )
             running_loss_validation.append(loss_validation.item())

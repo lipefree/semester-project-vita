@@ -45,7 +45,7 @@ def double_conv(in_channels, out_channels):
 
 
 class CVM_VIGOR(nn.Module):
-    def __init__(self, device, circular_padding, use_adapt, use_concat, use_mlp=False):
+    def __init__(self, device, circular_padding=True, use_adapt=False, use_concat=False, use_mlp=False):
         super(CVM_VIGOR, self).__init__()
         self.device = device
         self.circular_padding = circular_padding
@@ -233,7 +233,12 @@ class CVM_VIGOR(nn.Module):
             )
         return nn.ModuleList(input_proj_list)
 
-    def forward(self, grd, sat, osm):
+    def forward(self, grd, sat, osm, heatmap=None):
+
+        if heatmap is not None:
+            osm += heatmap
+            sat += heatmap
+        
         grd_feature_volume = self.grd_efficientnet.extract_features(grd)
         grd_descriptor1 = self.grd_feature_to_descriptor1(
             grd_feature_volume
@@ -328,6 +333,7 @@ class CVM_VIGOR(nn.Module):
             osm_feature_volume
         ]
 
+        # print('volume size ', osm_feature_volume.shape)
         batch_size = sat.size(0)  # Get batch size dynamically
 
         (

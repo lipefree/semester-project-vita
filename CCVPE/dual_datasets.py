@@ -35,7 +35,7 @@ class VIGORDataset(Dataset):
         random_orientation=None,
         use_osm_tiles=False,
         use_50_n_osm_tiles=False,
-        use_osm_rendered=False,
+        use_osm_rendered=True,
         use_concat=False,
     ):
         self.root = root
@@ -77,8 +77,9 @@ class VIGORDataset(Dataset):
                     self.root, city, "osm_tiles", "data.npy"
                 )
                 
-                with open(osm_tile_path, 'rb') as f:
-                    loaded_data = np.load(f )
+                # with open(osm_tile_path, 'rb') as f:
+                #     loaded_data = np.load(f)
+                loaded_data = np.load(osm_tile_path, mmap_mode='r')
                     
                 # with gzip.open(osm_tile_path, "rb") as f:
                 #     loaded_data = pickle.load(f)
@@ -190,40 +191,41 @@ class VIGORDataset(Dataset):
 
         # satellite OR osm tiles
 
-        transform_osm_tile = transforms.Compose(
-            [
-                # resize
-                transforms.Resize([512, 512]),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        )
+        if self.use_osm_tiles:
+            transform_osm_tile = transforms.Compose(
+                [
+                    # resize
+                    transforms.Resize([512, 512]),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                    ),
+                ]
+            )
 
-        pos_index = 0
-        osm_idx = self.label[idx][pos_index]
+            pos_index = 0
+            osm_idx = self.label[idx][pos_index]
 
-        osm_tile: np.ndarray = self.osm_tiles[osm_idx]
-           
-        if self.use_rendered_tiles:
-            osm_tile = np.array(Colormap.apply(osm_tile))
-            osm_tile = np.moveaxis(osm_tile, -1, 0)
+            osm_tile: np.ndarray = self.osm_tiles[osm_idx]
 
-        # print(f'dimension is {osm_tile.shape}')
+            if self.use_rendered_tiles:
+                osm_tile = np.array(Colormap.apply(osm_tile))
+                osm_tile = np.moveaxis(osm_tile, -1, 0)
 
-        if self.use_50_n_osm_tiles:
-            osm_tile = project_to_n(osm_tile)
+            # print(f'dimension is {osm_tile.shape}')
 
-        _, width_raw, height_raw = osm_tile.shape
+            if self.use_50_n_osm_tiles:
+                osm_tile = project_to_n(osm_tile)
 
-        osm_tile_tensor = torch.from_numpy(np.ascontiguousarray(osm_tile)).float()
+            _, width_raw, height_raw = osm_tile.shape
 
-        osm_tile = transform_osm_tile(osm_tile_tensor)
-        _, height, width = osm_tile.size()
-        pos_index = 0
-        [row_offset, col_offset] = self.delta[idx, pos_index]
-        row_offset = np.round(row_offset / height_raw * height)
-        col_offset = np.round(col_offset / width_raw * width)
+            osm_tile_tensor = torch.from_numpy(np.ascontiguousarray(osm_tile)).float()
+
+            osm_tile = transform_osm_tile(osm_tile_tensor)
+            _, height, width = osm_tile.size()
+            pos_index = 0
+            [row_offset, col_offset] = self.delta[idx, pos_index]
+            row_offset = np.round(row_offset / height_raw * height)
+            col_offset = np.round(col_offset / width_raw * width)
 
         if self.pos_only:  # load positives only
             pos_index = 0
@@ -305,7 +307,10 @@ class VIGORDataset(Dataset):
 
         # print(self.sat_list[self.label[idx][pos_index]])
         # print("at idx ", idx)
-        return grd, sat, osm_tile, gt, gt_with_ori, orientation, city, orientation_angle
+        if self.use_osm_tiles:
+            return grd, sat, osm_tile, gt, gt_with_ori, orientation, city, orientation_angle
+        else:
+            return grd, sat, sat, gt, gt_with_ori, orientation, city, orientation_angle
 
     def get_item_sat(self, idx):
         '''

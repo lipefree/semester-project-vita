@@ -10,8 +10,9 @@ from torchvision import transforms
 import torch
 import numpy as np
 import math
+import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
+from matplotlib.colors import LogNorm, NoNorm
 from training_utils import get_location, get_meter_distance, get_orientation_distance
 from tqdm import tqdm
 from torch.utils.data import DataLoader, Subset
@@ -40,6 +41,66 @@ def get_meter_distance(loc_gt, loc_pred, city: str, batch_idx) -> float:
     return meter_distance
 
 
+def get_images(idx, dataset):
+    grd, sat, osm, gt, _, orientation, city, _ = dataset.__getitem__(idx)
+    invTrans = transforms.Compose([ transforms.Normalize(mean = [ 0., 0., 0. ],
+                                                     std = [ 1/0.229, 1/0.224, 1/0.225 ]),
+                                transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ],
+                                                     std = [ 1., 1., 1. ]),
+                               ])
+
+    grd = invTrans(grd)
+    sat = invTrans(sat)
+    osm = invTrans(osm)
+    return grd, sat, osm, gt
+
+
+def show_ground(grd):
+    plt.figure(figsize=(8,12))
+    plt.imshow(  grd.permute(1, 2, 0)  )
+    plt.axvline(grd.size()[2]/2, color='g')
+    plt.axis('off')
+
+
+def get_heatmap_array(experiment_name, base_test_result_path):
+    heatmaps_file_path = f'{base_test_result_path}{experiment_name}/heatmaps.npz'
+    return np.load(heatmaps_file_path)
+
+def get_distance_array(experiment_name, best_test_result_path):
+    distance_array_path = f'{best_test_result_path}{experiment_name}/distance_test.npy'
+    return np.load(distance_array_path)
+
+def get_heatmap(heatmap_array, idx):
+    key = f"heatmap_{idx}"
+    return heatmap_array[key].squeeze(0)
+
+
+def show_image(sat, grd, heatmap, gt):
+    gt = gt.permute(1, 2, 0)
+    loc_pred = np.unravel_index(heatmap.argmax(), heatmap.shape)
+    loc_gt = np.unravel_index(gt.argmax(), gt.shape)
+    plt.figure(figsize=(6,6))
+    plt.imshow(  sat.permute(1, 2, 0)  )
+    plt.imshow(heatmap,  norm=LogNorm(vmax=np.max(heatmap)), alpha=0.4, cmap='Reds')
+    plt.scatter(loc_gt[1], loc_gt[0], s=300, marker='^', facecolor='g', label='GT', edgecolors='white')
+    plt.scatter(loc_pred[1], loc_pred[0], s=300, marker='*', facecolor='gold', label='Ours', edgecolors='white')
+    xx,yy = np.meshgrid(np.linspace(0,512,512),np.linspace(0,512,512))
+    plt.axis('off')
+    plt.legend(loc=2, framealpha=0.8, labelcolor='black', prop={'size': 15})
+
+def show_image_subplot(sat, grd, heatmap, gt, n, m, axs, title):
+    gt = gt.permute(1, 2, 0)
+    loc_pred = np.unravel_index(heatmap.argmax(), heatmap.shape)
+    loc_gt = np.unravel_index(gt.argmax(), gt.shape)
+    axs[n, m].imshow(  sat.permute(1, 2, 0)  )
+    axs[n, m].imshow(heatmap,  norm=LogNorm(vmax=np.max(heatmap)), alpha=0.4, cmap='Reds')
+    axs[n, m].scatter(loc_gt[1], loc_gt[0], s=300, marker='^', facecolor='g', label='GT', edgecolors='white')
+    axs[n, m].scatter(loc_pred[1], loc_pred[0], s=300, marker='*', facecolor='gold', label='Ours', edgecolors='white')
+    xx,yy = np.meshgrid(np.linspace(0,512,512),np.linspace(0,512,512))
+    axs[n, m].axis('off')
+    axs[n, m].legend(loc=2, framealpha=0.8, labelcolor='black', prop={'size': 15})
+    axs[n, m].title.set_text(title)
+    
 class QualitativeUtils:
 
     def __init__(self, model, model_name, epoch, dataset=None):

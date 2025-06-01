@@ -3,8 +3,10 @@ __pycache__/
 CCVPE/experiments/*
 CCVPE/models/
 CCVPE/results/
-CCVPE/runs/
 CCVPE/figures
 CCVPE/old_runs
 CCVPE/.ipynb_checkpoints/
 CCVPE/refactor/
+CCVPE/runs
+CCVPE/fused_images
+CCVPE/weights/
