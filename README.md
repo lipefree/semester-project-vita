@@ -1,12 +1,13 @@
-Install requirements using : `pip install -r CCVPE/requirements.txt`
+This project is managed using [uv](https://docs.astral.sh/uv/):
+* clone this repository : `git clone git@github.com:lipefree/semester-project-vita.git && cd semester-project-vita/CCVPE`
+* create venv : `uv venv`
+* activate venv : `source .venv/bin/activate`
+* install mmcv : `mim install mmcv`
 
-Install openmmcv for deformable attention : `mim install mmcv`
-
-We have a different models that was implemented in the report. 
-To retrain them use : `python CCVPE/{model_name}_train.py`
-For example : `python CCVPE/multiple_deformable_attention_train.py`
-
-To run baselines on CCVPE on OSM tile or satellite image, you can use : `python CCVPE/train_VIGOR.py --osm={True,False}` 
+To rerun experiments:
+* change directory to `semester-project-vita/CCVPE` if not done already
+* run script using uv : `uv run run.py`
+* To select experiment, modify run.py `experiment_name` field. The list of experiments is located at `registry.py` with short informations.
 
 maploc files comes from https://github.com/facebookresearch/OrienterNet/tree/main
 
