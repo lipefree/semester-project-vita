@@ -52,7 +52,7 @@ def main():
                          batch_size=batch_size,
                          device=device,
                          base_path=base_path,
-                         debug=(debug:=True))
+                         debug=(debug:=False))
         
         save_distances(experiment_name, distances, base_path)
         writer.add_scalar("Test/mean_distance", 

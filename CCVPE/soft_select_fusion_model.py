@@ -502,11 +502,13 @@ class PatchRouter(nn.Module):
         # 1) score each patch
         x = 0.5 * (p1 + p2)  # [B,N,D]
         logits = self.logit(x)  # [B,N,2]
+        # We rescale in the same fashion as in attention, or we will get mostly 0 and 1
+        scale = D**0.5
 
-        # 2) gumbel‐softmax into weights
-        weights = F.softmax(
-            logits.flatten(0, 1), dim=-1
-        ).view(B, N, 2)  # [B,N,2]
+        # 2) softmax into weights
+        weights = F.softmax((logits / scale).flatten(0, 1), dim=-1).view(
+            B, N, 2
+        )  # [B,N,2]
 
         # 3) stack & route: [B,N,2,D] → [B,N,D]
         stacked = torch.stack([p1, p2], dim=2)

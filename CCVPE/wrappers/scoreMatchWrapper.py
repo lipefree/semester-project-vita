@@ -10,12 +10,24 @@ from torchvision import transforms
 import random
 
 
-class ScoreMatchWrapper():
-    def __init__(self, experiment_name, device, weight_infoNCE=1e4, weight_ori=1e1, use_fusion_loss=False, only_sat=False, random=False):
-        self.model = CVM(device, circular_padding=True,
-                         use_adapt=False,
-                         use_concat=False,
-                         use_mlp=False, ).to(device)
+class ScoreMatchWrapper:
+    def __init__(
+        self,
+        experiment_name,
+        device,
+        weight_infoNCE=1e4,
+        weight_ori=1e1,
+        use_fusion_loss=False,
+        only_sat=False,
+        random=False,
+    ):
+        self.model = CVM(
+            device,
+            circular_padding=True,
+            use_adapt=False,
+            use_concat=False,
+            use_mlp=False,
+        ).to(device)
         self.weight_infoNCE = weight_infoNCE
         self.weight_ori = weight_ori
         self.fusion_loss = Fusionloss()
@@ -44,7 +56,7 @@ class ScoreMatchWrapper():
         ) = output
 
         if global_step % 10 == 0:
-            self.log_loss('Train', global_step, writer, *losses)
+            self.log_loss("Train", global_step, writer, *losses)
 
         if global_step % 200 == 0:
             self.log_metric(data, output, global_step, writer)
@@ -79,7 +91,8 @@ class ScoreMatchWrapper():
         ) = output
 
         losses = self.compute_loss(
-            output[1:], gt, gt_orientation, gt_with_ori, osm, sat)
+            output[1:], gt, gt_orientation, gt_with_ori, osm, sat
+        )
         return output, losses, heatmap
 
     def set_model_to_train(self):
@@ -93,44 +106,50 @@ class ScoreMatchWrapper():
         output, losses, heatmap = self.infer(data)
 
         losses = self.compute_loss(
-            output[1:], gt, gt_orientation, gt_with_ori, osm, sat)
+            output[1:], gt, gt_orientation, gt_with_ori, osm, sat
+        )
 
-        validation_state['loss'].append(losses[0].item())
-        validation_state['loss_ce'].append(losses[1].item())
-        validation_state['loss_infonce'].append(losses[2].item())
-        validation_state['loss_ori'].append(losses[3].item())
+        validation_state["loss"].append(losses[0].item())
+        validation_state["loss_ce"].append(losses[1].item())
+        validation_state["loss_infonce"].append(losses[2].item())
+        validation_state["loss_ori"].append(losses[3].item())
 
         distance, orientation_error = self.get_distances_ori(
-            output, gt, gt_with_ori, gt_orientation, city)
-        validation_state['distance'].extend(distance)
-        validation_state['orientation_error'].extend(orientation_error)
+            output, gt, gt_with_ori, gt_orientation, city
+        )
+        validation_state["distance"].extend(distance)
+        validation_state["orientation_error"].extend(orientation_error)
 
         return validation_state
 
     def validation_log(self, validation_state, epoch, writer):
-        loss = np.mean(validation_state['loss'])
-        loss_ce = np.mean(validation_state['loss_ce'])
-        loss_infonce = np.mean(validation_state['loss_infonce'])
-        loss_ori = np.mean(validation_state['loss_ori'])
-        loss_fusion = np.mean(validation_state['loss_image'])
+        loss = np.mean(validation_state["loss"])
+        loss_ce = np.mean(validation_state["loss_ce"])
+        loss_infonce = np.mean(validation_state["loss_infonce"])
+        loss_ori = np.mean(validation_state["loss_ori"])
+        loss_fusion = np.mean(validation_state["loss_image"])
 
-        self.log_loss('Validation', epoch,
-                      writer, loss, loss_ce, loss_infonce,
-                      loss_ori)
+        self.log_loss(
+            "Validation", epoch, writer, loss, loss_ce, loss_infonce, loss_ori
+        )
 
-        writer.add_scalar("Validation/mean_distance",
-                          np.mean(validation_state['distance']),
-                          epoch)
-        writer.add_scalar("Validation/median_distance",
-                          np.median(validation_state['distance']),
-                          epoch)
-        writer.add_scalar("Validation/mean_orientation_error",
-                          np.mean(validation_state['orientation_error']),
-                          epoch)
+        writer.add_scalar(
+            "Validation/mean_distance", np.mean(validation_state["distance"]), epoch
+        )
+        writer.add_scalar(
+            "Validation/median_distance", np.median(validation_state["distance"]), epoch
+        )
+        writer.add_scalar(
+            "Validation/mean_orientation_error",
+            np.mean(validation_state["orientation_error"]),
+            epoch,
+        )
 
-        writer.add_scalar("Validation/median_orientation_error",
-                          np.median(validation_state['orientation_error']),
-                          epoch)
+        writer.add_scalar(
+            "Validation/median_orientation_error",
+            np.median(validation_state["orientation_error"]),
+            epoch,
+        )
 
         writer.flush()
 
@@ -175,13 +194,13 @@ class ScoreMatchWrapper():
 
     def init_validation_state(self):
         return {
-            'loss': [],
-            'loss_ce': [],
-            'loss_infonce': [],
-            'loss_ori': [],
-            'loss_image': [],
-            'distance': [],
-            'orientation_error': []
+            "loss": [],
+            "loss_ce": [],
+            "loss_infonce": [],
+            "loss_ori": [],
+            "loss_image": [],
+            "distance": [],
+            "orientation_error": [],
         }
 
     def compute_loss(self, output, gt, gt_orientation, gt_with_ori, osm, sat):
@@ -199,20 +218,26 @@ class ScoreMatchWrapper():
         ) = output
 
         loss, loss_ce, loss_infonce, loss_ori = loss_ccvpe(
-            output, gt, gt_orientation, gt_with_ori, self.weight_infoNCE, self.weight_ori
+            output,
+            gt,
+            gt_orientation,
+            gt_with_ori,
+            self.weight_infoNCE,
+            self.weight_ori,
         )
 
         return loss, loss_ce, loss_infonce, loss_ori
 
-    def log_loss(self, stage_name, global_step, writer, loss, loss_ce, loss_infonce, loss_ori):
+    def log_loss(
+        self, stage_name, global_step, writer, loss, loss_ce, loss_infonce, loss_ori
+    ):
         writer.add_scalar(f"{stage_name}/loss_ce", loss_ce, global_step)
-        writer.add_scalar(f"{stage_name}/loss_infonce",
-                          loss_infonce, global_step)
+        writer.add_scalar(f"{stage_name}/loss_infonce", loss_infonce, global_step)
         writer.add_scalar(f"{stage_name}/loss_ori", loss_ori, global_step)
         writer.add_scalar(f"Loss/{stage_name}", loss, global_step)
 
     def log_metric(self, data, output, global_step, writer):
-        print('log metric')
+        print("log metric")
         grd, sat, osm, gt, gt_with_ori, gt_orientation, city, gt_flattened = data
         (
             alpha,
@@ -250,11 +275,8 @@ class ScoreMatchWrapper():
             if orientation_distance is not None:
                 orientation_error.append(orientation_distance)
 
-        writer.add_scalar("Train/mean_distance",
-                          np.mean(distance), global_step)
-        writer.add_scalar(
-            "Train/median_distance", np.median(distance), global_step
-        )
+        writer.add_scalar("Train/mean_distance", np.mean(distance), global_step)
+        writer.add_scalar("Train/median_distance", np.median(distance), global_step)
         writer.add_scalar(
             "Train/mean_orientation_error",
             np.mean(orientation_error),

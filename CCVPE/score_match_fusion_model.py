@@ -46,7 +46,15 @@ def double_conv(in_channels, out_channels):
 
 
 class CVM_VIGOR(nn.Module):
-    def __init__(self, device, circular_padding, use_adapt, use_concat, use_mlp=False, alpha_type=0):
+    def __init__(
+        self,
+        device,
+        circular_padding,
+        use_adapt,
+        use_concat,
+        use_mlp=False,
+        alpha_type=0,
+    ):
         super(CVM_VIGOR, self).__init__()
         self.device = device
         self.circular_padding = circular_padding
@@ -217,7 +225,7 @@ class CVM_VIGOR(nn.Module):
         self.fuse_normalization = normalization(2, 1)
 
         self.deformable_fusion = deformable_fusion(self.device, alpha_type)
-        self.heatmap_norm = nn.LayerNorm(normalized_shape=(512,512))
+        self.heatmap_norm = nn.LayerNorm(normalized_shape=(512, 512))
 
         self.fusion_volume = FusionModule(1280, 8, 8, 20, device)
         self.fusion5 = FusionModule(320, 16, 16, 20, device)
@@ -226,7 +234,7 @@ class CVM_VIGOR(nn.Module):
         self.fusion2 = FusionModule(24, 128, 128, 20, device)
         self.fusion1 = FusionModule(16, 256, 256, 20, device)
 
-        self.learnable_Q = nn.Embedding(8*8, 20)
+        self.learnable_Q = nn.Embedding(8 * 8, 20)
 
         self.fusions = nn.ModuleList(
             [
@@ -237,7 +245,7 @@ class CVM_VIGOR(nn.Module):
                 self.fusion1,
             ]
         )
-        
+
     def get_input_proj_list(self, channels, embed_dims, num_levels):
         """
         Use to get uniform channels accross all levels, will preserve W and H dims.
@@ -254,7 +262,6 @@ class CVM_VIGOR(nn.Module):
         return nn.ModuleList(input_proj_list)
 
     def forward(self, grd, sat, osm, scores):
-
         grd_feature_volume = self.grd_efficientnet.extract_features(grd)
         grd_descriptor1 = self.grd_feature_to_descriptor1(
             grd_feature_volume
@@ -321,7 +328,6 @@ class CVM_VIGOR(nn.Module):
         sat_feature_block10 = multiscale_sat[10]  # [112, 32, 32]
         sat_feature_block15 = multiscale_sat[15]  # [320, 16, 16]
 
-
         osm_feature_volume, multiscale_osm = (
             self.osm_efficientnet.extract_features_multiscale(osm)
         )
@@ -347,8 +353,15 @@ class CVM_VIGOR(nn.Module):
         osm_descriptor_map = self.get_descriptor(osm_feature_volume)
 
         batch_size = grd.shape[0]
-        f_score = self.learnable_Q.weight.reshape(8, 8, 20).permute(2, 0, 1).unsqueeze(0).repeat(batch_size, 1, 1, 1)
-        fuse_descriptor_map, a = self.fusion_volume(f_score, sat_descriptor_map, osm_descriptor_map)
+        f_score = (
+            self.learnable_Q.weight.reshape(8, 8, 20)
+            .permute(2, 0, 1)
+            .unsqueeze(0)
+            .repeat(batch_size, 1, 1, 1)
+        )
+        fuse_descriptor_map, a = self.fusion_volume(
+            f_score, sat_descriptor_map, osm_descriptor_map
+        )
 
         x = fuse_descriptor_map
         matching_score_stacked_list = []
@@ -390,7 +403,9 @@ class CVM_VIGOR(nn.Module):
 
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)
 
-        return (alphas, logits_flattened, heatmap, x_ori) + tuple(matching_score_stacked_list)
+        return (alphas, logits_flattened, heatmap, x_ori) + tuple(
+            matching_score_stacked_list
+        )
 
     def get_descriptor(self, fuse_feature_volume):
         fuse_row_chunks = torch.stack(
@@ -426,7 +441,6 @@ class CVM_VIGOR(nn.Module):
 
         return fuse_descriptor_map
 
-
     def compute_matching_score(
         self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm
     ):
@@ -443,9 +457,7 @@ class CVM_VIGOR(nn.Module):
 
             matching_score = torch.sum(
                 (grd_descriptor_map * sat_descriptor_map_window), dim=1, keepdim=True
-            ) / (
-                sat_map_norm * grd_map_norm
-            )  # cosine similarity
+            ) / (sat_map_norm * grd_map_norm)  # cosine similarity
             if i == 0:
                 matching_score_stacked = matching_score
             else:
@@ -460,11 +472,10 @@ class CVM_VIGOR(nn.Module):
         self, level, x, grd_descriptor, grd_descriptor_map, fuse_feature_block
     ):
         grd_des_len = grd_descriptor.size()[1]
-        fuse_des_len = x.size()[1]
         grd_map_norm = torch.norm(grd_descriptor_map, p="fro", dim=1, keepdim=True)
 
         shift = int(64 / 2**level)
-        matching_score_max, matching_score_stacked  = self.compute_matching_score(
+        matching_score_max, matching_score_stacked = self.compute_matching_score(
             shift, x, grd_des_len, grd_descriptor_map, grd_map_norm
         )
 
@@ -474,7 +485,9 @@ class CVM_VIGOR(nn.Module):
         x = self.deconvs[level](x)
         da_output = None
         if fuse_feature_block is not None:
-            da_output, a = self.fusions[level](matching_score_stacked, fuse_feature_block[0], fuse_feature_block[1])
+            da_output, a = self.fusions[level](
+                matching_score_stacked, fuse_feature_block[0], fuse_feature_block[1]
+            )
             x = torch.cat([x, da_output], dim=1)
 
         x = self.convs[level](x)
@@ -498,15 +511,14 @@ class FusionModule(nn.Module):
 
         self.ca_osm = CrossAttention(embed_dim, H, W, input_embed_dim, device)
         self.ca_sat = CrossAttention(embed_dim, H, W, input_embed_dim, device)
-        self.conv = nn.Conv2d(in_channels=input_embed_dim, out_channels=embed_dim, kernel_size=1)
-        self.adaptive_alpha = nn.Sequential(
-            nn.Linear(embed_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),
-            nn.Sigmoid()
+        self.conv = nn.Conv2d(
+            in_channels=input_embed_dim, out_channels=embed_dim, kernel_size=1
         )
-        self.upsample = nn.Upsample(size=(H, W), mode='bilinear')
-        
+        self.adaptive_alpha = nn.Sequential(
+            nn.Linear(embed_dim, 64), nn.ReLU(), nn.Linear(64, 1), nn.Sigmoid()
+        )
+        self.upsample = nn.Upsample(size=(H, W), mode="bilinear")
+
     def forward(self, ground, sat, osm):
         ground = self.upsample(ground)
 
@@ -517,37 +529,55 @@ class FusionModule(nn.Module):
         sat_output = self.ca_sat(ground, sat)
         osm_output = self.ca_osm(ground, osm)
 
-        return a * sat_output + (1 - a) *osm_output, a
-        
+        return a * sat_output + (1 - a) * osm_output, a
+
 
 class CrossAttention(nn.Module):
     def __init__(self, embed_dim, H, W, input_embed_dim, device):
         super().__init__()
 
-        grd_row_self_ = np.linspace(0, 1, W) 
-        grd_col_self_ = np.linspace(0, 1, H) 
-        grd_row_self, grd_col_self = np.meshgrid(grd_row_self_, grd_col_self_, indexing='ij') 
-        
-        self.reference_points = torch.stack((torch.tensor(grd_col_self), torch.tensor(grd_row_self)), -1).view(-1,2).unsqueeze(1).to(torch.float).to(device)   
+        grd_row_self_ = np.linspace(0, 1, W)
+        grd_col_self_ = np.linspace(0, 1, H)
+        grd_row_self, grd_col_self = np.meshgrid(
+            grd_row_self_, grd_col_self_, indexing="ij"
+        )
+
+        self.reference_points = (
+            torch.stack((torch.tensor(grd_col_self), torch.tensor(grd_row_self)), -1)
+            .view(-1, 2)
+            .unsqueeze(1)
+            .to(torch.float)
+            .to(device)
+        )
         self.spatial_shape = torch.tensor(([[H, W]])).to(device).long()
         self.level_start_index = torch.tensor([0]).to(device)
-        
-        self.attention = MultiScaleDeformableAttention(embed_dims=embed_dim, num_levels=1, 
-                                                           batch_first=True)
+
+        self.attention = MultiScaleDeformableAttention(
+            embed_dims=embed_dim, num_levels=1, batch_first=True
+        )
 
         self.pe = PositionEncodingSine(embed_dim)
         self.H = H
         self.W = W
         self.embed_dim = embed_dim
-        
+
     def forward(self, query, value):
         query += self.pe(query)
         query_flattened = query.flatten(start_dim=2).permute(0, 2, 1)
         value_flattened = value.flatten(start_dim=2).permute(0, 2, 1)
-        
-        reference_points = self.reference_points.unsqueeze(0).repeat(query.shape[0], 1, 1, 1)
-        output = self.attention(query=query_flattened, value=value_flattened, reference_points=reference_points, 
-                                            spatial_shapes=self.spatial_shape, level_start_index=self.level_start_index)
 
-        output = output.permute(0,2,1).view(query.shape[0], self.embed_dim, self.H, self.W)
+        reference_points = self.reference_points.unsqueeze(0).repeat(
+            query.shape[0], 1, 1, 1
+        )
+        output = self.attention(
+            query=query_flattened,
+            value=value_flattened,
+            reference_points=reference_points,
+            spatial_shapes=self.spatial_shape,
+            level_start_index=self.level_start_index,
+        )
+
+        output = output.permute(0, 2, 1).view(
+            query.shape[0], self.embed_dim, self.H, self.W
+        )
         return output + query

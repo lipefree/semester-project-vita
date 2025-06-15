@@ -46,7 +46,15 @@ def double_conv(in_channels, out_channels):
 
 
 class CVM_VIGOR(nn.Module):
-    def __init__(self, device, circular_padding, use_adapt, use_concat, use_mlp=False, alpha_type=0):
+    def __init__(
+        self,
+        device,
+        circular_padding,
+        use_adapt,
+        use_concat,
+        use_mlp=False,
+        alpha_type=0,
+    ):
         super(CVM_VIGOR, self).__init__()
         self.device = device
         self.circular_padding = circular_padding
@@ -217,7 +225,7 @@ class CVM_VIGOR(nn.Module):
         self.fuse_normalization = normalization(2, 1)
 
         self.deformable_fusion = deformable_fusion(self.device, alpha_type)
-        self.heatmap_norm = nn.LayerNorm(normalized_shape=(512,512))
+        self.heatmap_norm = nn.LayerNorm(normalized_shape=(512, 512))
 
         self.fusion5 = FusionModule(320, 16, 16, 1024, device)
         self.fusion4 = FusionModule(112, 32, 32, 320, device)
@@ -234,7 +242,7 @@ class CVM_VIGOR(nn.Module):
                 self.fusion1,
             ]
         )
-        
+
     def get_input_proj_list(self, channels, embed_dims, num_levels):
         """
         Use to get uniform channels accross all levels, will preserve W and H dims.
@@ -251,7 +259,6 @@ class CVM_VIGOR(nn.Module):
         return nn.ModuleList(input_proj_list)
 
     def forward(self, grd, sat, osm, heatmap=None, timestep=0):
-        
         heatmap += timestep
         heatmap = self.heatmap_norm(heatmap)
         if heatmap is not None:
@@ -330,7 +337,7 @@ class CVM_VIGOR(nn.Module):
             multiscale_sat[4],
             multiscale_sat[10],
             # multiscale_sat[15],
-            sat_feature_volume
+            sat_feature_volume,
         ]
 
         osm_feature_volume, multiscale_osm = (
@@ -349,7 +356,7 @@ class CVM_VIGOR(nn.Module):
             multiscale_osm[4],
             multiscale_osm[10],
             # multiscale_osm[15],
-            osm_feature_volume
+            osm_feature_volume,
         ]
 
         batch_size = sat.size(0)  # Get batch size dynamically
@@ -362,10 +369,15 @@ class CVM_VIGOR(nn.Module):
             fuse_feature_block15,
             fuse_feature_volume,
             fused_image,
-            alpha
-        ) = self.deformable_fusion(sat_features, osm_features, 
-                                   osm_feature_block0, sat_feature_block0, 
-                                   batch_size, heatmap)
+            alpha,
+        ) = self.deformable_fusion(
+            sat_features,
+            osm_features,
+            osm_feature_block0,
+            sat_feature_block0,
+            batch_size,
+            heatmap,
+        )
 
         fuse_feature_blocks = [
             (sat_feature_block15, osm_feature_block15),
@@ -447,7 +459,9 @@ class CVM_VIGOR(nn.Module):
 
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)
 
-        return (alphas, fused_image, logits_flattened, heatmap, x_ori) + tuple(matching_score_stacked_list)
+        return (alphas, fused_image, logits_flattened, heatmap, x_ori) + tuple(
+            matching_score_stacked_list
+        )
 
     def compute_matching_score(
         self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm
@@ -465,9 +479,7 @@ class CVM_VIGOR(nn.Module):
 
             matching_score = torch.sum(
                 (grd_descriptor_map * sat_descriptor_map_window), dim=1, keepdim=True
-            ) / (
-                sat_map_norm * grd_map_norm
-            )  # cosine similarity
+            ) / (sat_map_norm * grd_map_norm)  # cosine similarity
             if i == 0:
                 matching_score_stacked = matching_score
             else:
@@ -493,11 +505,12 @@ class CVM_VIGOR(nn.Module):
         # loc
         x = torch.cat([matching_score_max, self.fuse_normalization(x)], dim=1)
 
-        x = self.deconvs[level](x) # 1024, 16, 16
+        x = self.deconvs[level](x)  # 1024, 16, 16
         da_output = None
         if fuse_feature_block is not None:
-
-            da_output, a = self.fusions[level](x, fuse_feature_block[0], fuse_feature_block[1])
+            da_output, a = self.fusions[level](
+                x, fuse_feature_block[0], fuse_feature_block[1]
+            )
             x = torch.cat([x, da_output], dim=1)
 
         x = self.convs[level](x)
@@ -521,14 +534,13 @@ class FusionModule(nn.Module):
 
         self.ca_osm = CrossAttention(embed_dim, H, W, input_embed_dim, device)
         self.ca_sat = CrossAttention(embed_dim, H, W, input_embed_dim, device)
-        self.conv = nn.Conv2d(in_channels=input_embed_dim, out_channels=embed_dim, kernel_size=1)
-        self.adaptive_alpha = nn.Sequential(
-            nn.Linear(embed_dim, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),
-            nn.Sigmoid()
+        self.conv = nn.Conv2d(
+            in_channels=input_embed_dim, out_channels=embed_dim, kernel_size=1
         )
-        
+        self.adaptive_alpha = nn.Sequential(
+            nn.Linear(embed_dim, 64), nn.ReLU(), nn.Linear(64, 1), nn.Sigmoid()
+        )
+
     def forward(self, ground, sat, osm):
         ground = self.conv(ground)
         ground_flattened = ground.flatten(start_dim=2).permute(0, 2, 1)
@@ -537,37 +549,55 @@ class FusionModule(nn.Module):
         sat_output = self.ca_sat(ground, sat)
         osm_output = self.ca_osm(ground, osm)
 
-        return a * sat_output + (1 - a) *osm_output, a
-        
+        return a * sat_output + (1 - a) * osm_output, a
+
 
 class CrossAttention(nn.Module):
     def __init__(self, embed_dim, H, W, input_embed_dim, device):
         super().__init__()
 
-        grd_row_self_ = np.linspace(0, 1, W) 
-        grd_col_self_ = np.linspace(0, 1, H) 
-        grd_row_self, grd_col_self = np.meshgrid(grd_row_self_, grd_col_self_, indexing='ij') 
-        
-        self.reference_points = torch.stack((torch.tensor(grd_col_self), torch.tensor(grd_row_self)), -1).view(-1,2).unsqueeze(1).to(torch.float).to(device)   
+        grd_row_self_ = np.linspace(0, 1, W)
+        grd_col_self_ = np.linspace(0, 1, H)
+        grd_row_self, grd_col_self = np.meshgrid(
+            grd_row_self_, grd_col_self_, indexing="ij"
+        )
+
+        self.reference_points = (
+            torch.stack((torch.tensor(grd_col_self), torch.tensor(grd_row_self)), -1)
+            .view(-1, 2)
+            .unsqueeze(1)
+            .to(torch.float)
+            .to(device)
+        )
         self.spatial_shape = torch.tensor(([[H, W]])).to(device).long()
         self.level_start_index = torch.tensor([0]).to(device)
-        
-        self.attention = MultiScaleDeformableAttention(embed_dims=embed_dim, num_levels=1, 
-                                                           batch_first=True)
+
+        self.attention = MultiScaleDeformableAttention(
+            embed_dims=embed_dim, num_levels=1, batch_first=True
+        )
 
         self.pe = PositionEncodingSine(embed_dim)
         self.H = H
         self.W = W
         self.embed_dim = embed_dim
-        
+
     def forward(self, query, value):
         query += self.pe(query)
         query_flattened = query.flatten(start_dim=2).permute(0, 2, 1)
         value_flattened = value.flatten(start_dim=2).permute(0, 2, 1)
-        
-        reference_points = self.reference_points.unsqueeze(0).repeat(query.shape[0], 1, 1, 1)
-        output = self.attention(query=query_flattened, value=value_flattened, reference_points=reference_points, 
-                                            spatial_shapes=self.spatial_shape, level_start_index=self.level_start_index)
 
-        output = output.permute(0,2,1).view(query.shape[0], self.embed_dim, self.H, self.W)
+        reference_points = self.reference_points.unsqueeze(0).repeat(
+            query.shape[0], 1, 1, 1
+        )
+        output = self.attention(
+            query=query_flattened,
+            value=value_flattened,
+            reference_points=reference_points,
+            spatial_shapes=self.spatial_shape,
+            level_start_index=self.level_start_index,
+        )
+
+        output = output.permute(0, 2, 1).view(
+            query.shape[0], self.embed_dim, self.H, self.W
+        )
         return output + query

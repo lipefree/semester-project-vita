@@ -13,6 +13,12 @@ from wrappers.hardSelectWrapper import HardSelectWrapper
 from wrappers.wholeHardSelectWrapper import WholeHardSelectWrapper
 from wrappers.fineHardSelectWrapper import FineHardSelectWrapper
 from wrappers.softSelectWrapper import SoftSelectWrapper
+from wrappers.patchDAFWrapper import PatchDAFWrapper
+from wrappers.hardPatchDAFWrapper import HardPatchDAFWrapper
+from wrappers.scoreSoftSelectWrapper import ScoreSoftSelectWrapper
+from wrappers.scorePatchDAFWrapper import ScorePatchDAFWrapper
+from wrappers.convnextScorePatchDAFWrapper import ConvNextScorePatchDAFWrapper
+from wrappers.convnextFineScorePatchDAFWrapper import ConvNextFineScorePatchDAFWrapper
 from functools import partial
 
 """
@@ -127,7 +133,58 @@ registry = {
     "fine_hard_select_fusion_rerun": partial(
         FineHardSelectWrapper
     ),  # Still multi scale but at each scale we have more than 1 patch
-    "soft_select_fusion_debug": partial(SoftSelectWrapper),
+    "soft_select_fusion_debug": partial(
+        SoftSelectWrapper
+    ),  # select at a patch level but soft
+    "soft_select_fusion": partial(
+        SoftSelectWrapper
+    ),  # select at a patch level but soft
+    "soft_select_fusion_v2": partial(
+        SoftSelectWrapper
+    ),  # select at a patch level but soft, but with rescale
+    "soft_patch_DAF_debug": partial(
+        PatchDAFWrapper
+    ),  # missleading name: its actually score matching guided fusion at a patch level with soft selection
+    "soft_patch_DAF": partial(PatchDAFWrapper),
+    "soft_patch_DAF_v2_debug": partial(  # v2 fixes softmax scaling
+        PatchDAFWrapper
+    ),  # missleading name: its actually score matching guided fusion at a patch level with soft selection
+    "soft_patch_DAF_v2": partial(PatchDAFWrapper),
+    "hard_patch_DAF_debug": partial(
+        HardPatchDAFWrapper
+    ),  # missleading name: its actually score matching guided fusion at a patch level with hard selection
+    "hard_patch_DAF": partial(HardPatchDAFWrapper),
+    "score_soft_select_fusion_debug": partial(
+        ScoreSoftSelectWrapper
+    ),  # select at a patch level but soft and guided by the score
+    "score_soft_select_fusion": partial(
+        ScoreSoftSelectWrapper
+    ),  # select at a patch level but soft and guided by the score
+    "score_soft_patch_DAF_debug": partial(  # v2 fixes softmax scaling
+        ScorePatchDAFWrapper
+    ),  # missleading name: its actually score matching guided fusion at a patch level with soft selection
+    "score_soft_patch_DAF": partial(ScorePatchDAFWrapper),
+    "convnext_score_soft_patch_DAF_debug": partial(
+        ConvNextScorePatchDAFWrapper
+    ),  # socre matching with soft select but with convnext
+    "convnext_tiny_score_soft_patch_DAF_debug": partial(
+        ConvNextScorePatchDAFWrapper, convnext_type="tiny"
+    ),  # socre matching with soft select but with convnext
+    "convnext_tiny_score_soft_patch_DAF": partial(
+        ConvNextScorePatchDAFWrapper, convnext_type="tiny"
+    ),  # socre matching with soft select but with convnext, tiny is 28M param (efficientnet is 5M)
+    "convnext_small_score_soft_patch_DAF_debug": partial(
+        ConvNextScorePatchDAFWrapper, convnext_type="small"
+    ),  # socre matching with soft select but with convnext
+    "convnext_small_score_soft_patch_DAF": partial(
+        ConvNextScorePatchDAFWrapper, convnext_type="small"
+    ),  # socre matching with soft select but with convnext, small is 50M param
+    "convnext_tiny_fine_score_soft_patch_DAF_debug": partial(
+        ConvNextScorePatchDAFWrapper, convnext_type="tiny"
+    ),  # socre matching with soft select but with convnext
+    "convnext_tiny_fine_score_soft_patch_DAF": partial(
+        ConvNextFineScorePatchDAFWrapper, convnext_type="tiny"
+    ),  # socre matching with soft select but with convnext, every scale has 16 patch (except volume at 8)
 }
 
 
