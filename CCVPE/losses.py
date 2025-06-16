@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 def infoNCELoss(scores, labels, temperature=0.1):
@@ -29,27 +30,47 @@ def cross_entropy_loss(logits, labels):
     return -torch.sum(labels * nn.LogSoftmax(dim=1)(logits)) / logits.size()[0]
 
 
+def soft_cross_entropy_with_smoothing(logits, soft_targets, smoothing=0.1):
+    B, K = logits.shape
+    # 1) smooth your soft targets toward uniform
+    with torch.no_grad():
+        uniform = torch.full_like(soft_targets, 1.0 / K)
+        smoothed = (1 - smoothing) * soft_targets + smoothing * uniform
+
+    # 2) get log-probs
+    log_p = F.log_softmax(logits, dim=1)  # (B, K)
+
+    # 3) compute KL-divergence (mean over batch)
+    #    this is equivalent to sum(smoothed * -log_p) / B
+    return F.kl_div(log_p, smoothed, reduction="batchmean")
+
+
 def wass_loss(heatmap, labels, gt_coords):
     B, _, L, _ = heatmap.size()
     D = heatmap
-    
+
     # Create coordinate grid
     device = heatmap.device
-    i = torch.arange(L, device=device).view(1, L, 1).repeat(B, 1, L)  # Row indices (B, L, L)
-    j = torch.arange(L, device=device).view(1, 1, L).repeat(B, L, 1)  # Column indices (B, L, L)
-    
+    i = (
+        torch.arange(L, device=device).view(1, L, 1).repeat(B, 1, L)
+    )  # Row indices (B, L, L)
+    j = (
+        torch.arange(L, device=device).view(1, 1, L).repeat(B, L, 1)
+    )  # Column indices (B, L, L)
+
     # Ground truth coordinates
     i_gt = gt_coords[:, 0].view(B, 1, 1)  # (B, 1, 1)
     j_gt = gt_coords[:, 1].view(B, 1, 1)  # (B, 1, 1)
-    
+
     # Compute distance map (d(i, j))
     d = torch.sqrt((i - i_gt) ** 2 + (j - j_gt) ** 2)  # Shape (B, L, L)
 
     # Compute Wasserstein loss
     loss = (d * D).sum(dim=(1, 2))  # Batch-wise loss (sum over grid)
-    
+
     # Average over the batch
     return loss.mean()
+
 
 def orientation_loss(ori, gt_orientation, gt):
     return (
@@ -63,9 +84,7 @@ def orientation_loss(ori, gt_orientation, gt):
 def loss_ccvpe(
     output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
 ) -> float:
-
-    
-    if(len(output) == 9 ):
+    if len(output) == 9:
         (
             logits_flattened,
             heatmap,
@@ -78,7 +97,8 @@ def loss_ccvpe(
             matching_score_stacked6,
         ) = output
     else:
-        (   _,
+        (
+            _,
             logits_flattened,
             heatmap,
             ori,
@@ -89,7 +109,6 @@ def loss_ccvpe(
             matching_score_stacked5,
             matching_score_stacked6,
         ) = output
-
 
     gt_bottleneck = nn.MaxPool2d(64, stride=64)(gt_with_ori)
     gt_bottleneck2 = nn.MaxPool2d(32, stride=32)(gt_with_ori)
@@ -148,10 +167,11 @@ def loss_ccvpe(
 
 
 def loss_router(weight, logits, gt_choice, sat_dist, osm_dist, t) -> float:
-
     # Binary cross-entropy loss
-    ce_loss = nn.CrossEntropyLoss(weight=weight, reduction='none')
-    loss1 = ce_loss(logits, gt_choice)  # Binary classification loss for routing decision
+    ce_loss = nn.CrossEntropyLoss(weight=weight, reduction="none")
+    loss1 = ce_loss(
+        logits, gt_choice
+    )  # Binary classification loss for routing decision
 
     # print(f'chosen {chosen}')
 
@@ -159,7 +179,7 @@ def loss_router(weight, logits, gt_choice, sat_dist, osm_dist, t) -> float:
 
     distance = torch.abs(sat_dist - osm_dist)
     mask = (distance >= -1).float()
-    
+
     # distance = torch.clamp(distance, max=50) # sometimes the distance is over 200 which is too much
 
     # loss2 = torch.exp(torch.div(distance, 5))
@@ -168,12 +188,13 @@ def loss_router(weight, logits, gt_choice, sat_dist, osm_dist, t) -> float:
 
     # d = 0 -> 1
     # d = 40 -> 1.5
-    # a*40 + 1 = 1.5 
+    # a*40 + 1 = 1.5
     # a = 0.5/40 = 0.0125
     loss2 = torch.sigmoid(distance - t)
 
     # print(f'loss 2 {loss2}')
     return loss1, loss2
+
 
 def get_distances(gt, osm_heatmap, sat_heatmap, city):
     gt_pred = get_max_coordinates(gt)
@@ -196,46 +217,49 @@ def get_distances(gt, osm_heatmap, sat_heatmap, city):
     # print(f'osm dist {osm_dist}')
     # print(f'sat dist {sat_dist}')
 
-    gt_choices = (sat_dist > osm_dist).float() # This means : 0 when sat is better, smaller dist is better (closer to gt)
+    gt_choices = (
+        sat_dist > osm_dist
+    ).float()  # This means : 0 when sat is better, smaller dist is better (closer to gt)
     # gt_choices = gt_choices.unsqueeze(1)
 
     # print(f'gt_choices {gt_choices}')
 
     return gt_choices, sat_dist, osm_dist
 
+
 def distance(x, y, city):
-    
     CITY_SCALE = {
-        'NewYork':       0.113248,
-        'Seattle':       0.100817,
-        'SanFrancisco':  0.118141,
-        'Chicago':       0.111262
+        "NewYork": 0.113248,
+        "Seattle": 0.100817,
+        "SanFrancisco": 0.118141,
+        "Chicago": 0.111262,
     }
 
-    pixel_distance = torch.sqrt((x[:,1]-y[:,1])**2+(x[:,0]-y[:,0])**2)
+    pixel_distance = torch.sqrt((x[:, 1] - y[:, 1]) ** 2 + (x[:, 0] - y[:, 0]) ** 2)
     scale_list = []
 
     for c in city:
         if c in CITY_SCALE:
             scale_list.append(CITY_SCALE[c])
         else:
-            scale_list.append(CITY_SCALE['NewYork'])
+            scale_list.append(CITY_SCALE["NewYork"])
 
-    scale_t = torch.tensor(scale_list, dtype=pixel_distance.dtype, device=pixel_distance.device)
+    scale_t = torch.tensor(
+        scale_list, dtype=pixel_distance.dtype, device=pixel_distance.device
+    )
     meter_distance = pixel_distance * scale_t / 512.0 * 640.0
 
     return meter_distance
-     
-     
+
 
 def get_max_coordinates(heatmap):
     """
     Given a heatmap of shape (B, 1, H, W), return the (x, y) coordinates
     of the max value in the grid for each batch using divmod.
-    
+
     Args:
         heatmap (torch.Tensor): Tensor of shape (B, 1, H, W)
-    
+
     Returns:
         torch.Tensor: Tensor of shape (B, 2) where each row is (x, y)
     """

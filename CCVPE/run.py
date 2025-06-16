@@ -13,7 +13,7 @@ import wandb
 def main():
     weight_ori = 1e1
     weight_infoNCE = 1e4
-    experiment_name = "convnext_tiny_fine_score_soft_patch_DAF_debug"
+    experiment_name = "score_fine_soft_patch_DAF_debug"
     wandb.init(project="VITA", name=experiment_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_wrapper = get_registry(experiment_name)(
@@ -51,6 +51,13 @@ def main():
     train_dataloader, val_dataloader = get_dataloaders(
         vigor, batch_size, debug_mode=(debug := False)
     )
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=learning_rate,
+        pct_start=0.1,
+        steps_per_epoch=len(train_dataloader),
+        epochs=num_epoch,
+    )
 
     if debug:
         num_epoch *= 100
@@ -59,6 +66,7 @@ def main():
         train_dataloader,
         val_dataloader,
         optimizer,
+        scheduler,
         model_wrapper,
         writer,
         device,
@@ -118,6 +126,7 @@ def train(
     train_dataloader,
     val_dataloader,
     optimizer,
+    scheduler,
     model_wrapper,
     tb_writer,
     device,
@@ -131,20 +140,19 @@ def train(
     best_epoch = -1
     for epoch in range(num_epoch):
         global_step = train_step(
-            train_dataloader, optimizer, model_wrapper, device, global_step, tb_writer
+            train_dataloader, optimizer, scheduler, model_wrapper, device, global_step, tb_writer
         )
-        mean_distance = validation_step(
-            val_dataloader, model_wrapper, device, epoch, tb_writer
-        )
+        mean_distance = validation_step(val_dataloader, model_wrapper, device, epoch, tb_writer)
         if not debug and mean_distance < best_distance:
             save_model(model_wrapper, epoch, experiment_name)
             best_epoch = epoch
+            best_distance = mean_distance
 
     return best_epoch
 
 
 def train_step(
-    train_dataloader, optimizer, model_wrapper, device, global_step, tb_writer
+    train_dataloader, optimizer, scheduler, model_wrapper, device, global_step, tb_writer
 ):
     steps = global_step
     model_wrapper.set_model_to_train()
@@ -154,8 +162,10 @@ def train_step(
         loss = model_wrapper.train_step(processed_data, steps, tb_writer)
         loss.backward()
         optimizer.step()
+        scheduler.step()
         steps += 1
         wandb.log({"train/loss": loss})
+        wandb.log({"train/lr": scheduler.get_last_lr()})
     return steps
 
 
@@ -170,9 +180,7 @@ def validation_step(val_dataloader, model_wrapper, device, epoch, tb_writer):
     with torch.no_grad():
         for i, data in enumerate(val_dataloader, 0):
             processed_data = process_data(data, device)
-            validation_state = model_wrapper.validation_step(
-                processed_data, validation_state
-            )
+            validation_state = model_wrapper.validation_step(processed_data, validation_state)
 
     model_wrapper.validation_log(validation_state, epoch, tb_writer)
     mean_distance = np.mean(validation_state["distance"])
@@ -203,16 +211,11 @@ def check_experiment_name(experiment_name: str):
 
         if the name does not contain 'debug' and collides then we crash the run
     """
-    if (
-        os.path.exists(os.path.join("runs", experiment_name))
-        and "debug" not in experiment_name
-    ):
+    if os.path.exists(os.path.join("runs", experiment_name)) and "debug" not in experiment_name:
         raise Exception(f"name already taken {experiment_name}")
 
 
-def get_dataloaders(
-    vigor_dataset: VIGORDataset, batch_size: int, debug_mode: bool = False
-):
+def get_dataloaders(vigor_dataset: VIGORDataset, batch_size: int, debug_mode: bool = False):
     """
     debug mode is used to run overfit test and see if the whole training loop is not crashing
     """

@@ -19,6 +19,7 @@ from wrappers.scoreSoftSelectWrapper import ScoreSoftSelectWrapper
 from wrappers.scorePatchDAFWrapper import ScorePatchDAFWrapper
 from wrappers.convnextScorePatchDAFWrapper import ConvNextScorePatchDAFWrapper
 from wrappers.convnextFineScorePatchDAFWrapper import ConvNextFineScorePatchDAFWrapper
+from wrappers.scoreFineSoftSelectWrapper import ScoreFinePatchDAFWrapper
 from functools import partial
 
 """
@@ -64,21 +65,13 @@ registry = {
     # no pretrain and OSM input is replaced by tensor of 0
     "single_daf": partial(SatDAFWrapper, pretrained=False, double_input=False),
     # no pretrain and we prune all the network related to OSM
-    "prune_single_daf": partial(
-        PruneSatDAFWrapper, pretrained=False, double_input=False
-    ),
+    "prune_single_daf": partial(PruneSatDAFWrapper, pretrained=False, double_input=False),
     # no pretrain and we prune all the network related to OSM
-    "prune_single_daf_rerun": partial(
-        PruneSatDAFWrapper, pretrained=False, double_input=False
-    ),
+    "prune_single_daf_rerun": partial(PruneSatDAFWrapper, pretrained=False, double_input=False),
     # no pretrain and we prune all the network related to OSM
-    "prune_single_daf_debug": partial(
-        PruneSatDAFWrapper, pretrained=False, double_input=False
-    ),
+    "prune_single_daf_debug": partial(PruneSatDAFWrapper, pretrained=False, double_input=False),
     # pretrain and OSM input is replaced by tensor of 0
-    "pretrained_single_daf": partial(
-        SatDAFWrapper, pretrained=True, double_input=False
-    ),
+    "pretrained_single_daf": partial(SatDAFWrapper, pretrained=True, double_input=False),
     # no pretrain and we input twice SAT to the model
     "double_daf": partial(SatDAFWrapper, pretrained=False, double_input=True),
     # no pretrain and we input twice SAT to the model
@@ -133,12 +126,8 @@ registry = {
     "fine_hard_select_fusion_rerun": partial(
         FineHardSelectWrapper
     ),  # Still multi scale but at each scale we have more than 1 patch
-    "soft_select_fusion_debug": partial(
-        SoftSelectWrapper
-    ),  # select at a patch level but soft
-    "soft_select_fusion": partial(
-        SoftSelectWrapper
-    ),  # select at a patch level but soft
+    "soft_select_fusion_debug": partial(SoftSelectWrapper),  # select at a patch level but soft
+    "soft_select_fusion": partial(SoftSelectWrapper),  # select at a patch level but soft
     "soft_select_fusion_v2": partial(
         SoftSelectWrapper
     ),  # select at a patch level but soft, but with rescale
@@ -180,11 +169,15 @@ registry = {
         ConvNextScorePatchDAFWrapper, convnext_type="small"
     ),  # socre matching with soft select but with convnext, small is 50M param
     "convnext_tiny_fine_score_soft_patch_DAF_debug": partial(
-        ConvNextScorePatchDAFWrapper, convnext_type="tiny"
+        ConvNextFineScorePatchDAFWrapper, convnext_type="tiny"
     ),  # socre matching with soft select but with convnext
     "convnext_tiny_fine_score_soft_patch_DAF": partial(
         ConvNextFineScorePatchDAFWrapper, convnext_type="tiny"
     ),  # socre matching with soft select but with convnext, every scale has 16 patch (except volume at 8)
+    "score_fine_soft_patch_DAF_debug": partial(  # v2 fixes softmax scaling
+        ScoreFinePatchDAFWrapper
+    ),  # missleading name: its actually score matching guided fusion at a patch level with soft selection
+    "score_fine_soft_patch_DAF": partial(ScoreFinePatchDAFWrapper),
 }
 
 

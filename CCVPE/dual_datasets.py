@@ -15,12 +15,14 @@ import pickle
 from torchvision import transforms
 from osm_tiles_helper import project_to_n
 from maploc.osm.viz import Colormap
+import torchvision.transforms.v2 as transforms
 
 torch.manual_seed(17)
 np.random.seed(0)
 
 # ---------------------------------------------------------------------------------
 # VIGOR
+
 
 class VIGORDataset(Dataset):
     def __init__(
@@ -37,6 +39,7 @@ class VIGORDataset(Dataset):
         use_50_n_osm_tiles=False,
         use_osm_rendered=True,
         use_concat=False,
+        augment=False,
     ):
         self.root = root
         self.label_root = label_root
@@ -49,6 +52,9 @@ class VIGORDataset(Dataset):
         self.use_50_n_osm_tiles = use_50_n_osm_tiles  # If we want to transform the osm tiles to 50 layers (corresponding to the 50 classes for OSM objects) TODO: this is really a bad way to do it
         self.use_rendered_tiles = use_osm_rendered
         self.use_concat = use_concat
+        self.augment = (
+            augment  # data augmentation such as rotations, random gaussian noise and random erasure
+        )
 
         if transform != None:
             self.grdimage_transform = transform[0]
@@ -70,17 +76,14 @@ class VIGORDataset(Dataset):
 
         idx = 0
         for city in self.city_list:
-
             # load pickle file for given city
             if self.use_osm_tiles:
-                osm_tile_path = os.path.join(
-                    self.root, city, "osm_tiles", "data.npy"
-                )
-                
+                osm_tile_path = os.path.join(self.root, city, "osm_tiles", "data.npy")
+
                 # with open(osm_tile_path, 'rb') as f:
                 #     loaded_data = np.load(f)
-                loaded_data = np.load(osm_tile_path, mmap_mode='r')
-                    
+                loaded_data = np.load(osm_tile_path, mmap_mode="r")
+
                 # with gzip.open(osm_tile_path, "rb") as f:
                 #     loaded_data = pickle.load(f)
 
@@ -88,20 +91,16 @@ class VIGORDataset(Dataset):
                 self.osm_tiles.extend(loaded_data)
                 print(f"osm tiles loaded for {city}")
 
-            sat_list_fname = os.path.join(
-                self.root, label_root, city, "satellite_list.txt"
-            )
+            sat_list_fname = os.path.join(self.root, label_root, city, "satellite_list.txt")
             with open(sat_list_fname, "r") as file:
                 for line in file.readlines():
                     self.sat_list.append(
-                        os.path.join(
-                            self.root, city, "satellite", line.replace("\n", "")
-                        )
+                        os.path.join(self.root, city, "satellite", line.replace("\n", ""))
                     )
                     self.sat_index_dict[line.replace("\n", "")] = idx
                     idx += 1
             print("InputData::__init__: load", sat_list_fname, idx)
-            
+
         self.sat_list = np.array(self.sat_list)
         self.sat_data_size = len(self.sat_list)
         print("Sat loaded, data size:{}".format(self.sat_data_size))
@@ -135,12 +134,8 @@ class VIGORDataset(Dataset):
                     for i in [1, 4, 7, 10]:
                         label.append(self.sat_index_dict[data[i]])
                     label = np.array(label).astype(int)
-                    delta = np.array(
-                        [data[2:4], data[5:7], data[8:10], data[11:13]]
-                    ).astype(float)
-                    self.grd_list.append(
-                        os.path.join(self.root, city, "panorama", data[0])
-                    )
+                    delta = np.array([data[2:4], data[5:7], data[8:10], data[11:13]]).astype(float)
+                    self.grd_list.append(os.path.join(self.root, city, "panorama", data[0]))
                     self.label.append(label)
                     self.delta.append(delta)
                     if not label[0] in self.sat_cover_dict:
@@ -164,9 +159,7 @@ class VIGORDataset(Dataset):
             grd = grd.convert("RGB")
         except:
             print("unreadable image")
-            grd = PIL.Image.new(
-                "RGB", (320, 640)
-            )  # if the image is unreadable, use a blank image
+            grd = PIL.Image.new("RGB", (320, 640))  # if the image is unreadable, use a blank image
         grd = self.grdimage_transform(grd)
 
         # generate a random rotation
@@ -185,9 +178,7 @@ class VIGORDataset(Dataset):
             dims=2,
         )
 
-        orientation_angle = (
-            rotation * 360
-        )  # 0 means heading North, counter-clockwise increasing
+        orientation_angle = rotation * 360  # 0 means heading North, counter-clockwise increasing
 
         # satellite OR osm tiles
 
@@ -196,9 +187,7 @@ class VIGORDataset(Dataset):
                 [
                     # resize
                     transforms.Resize([512, 512]),
-                    transforms.Normalize(
-                        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                    ),
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ]
             )
 
@@ -229,12 +218,8 @@ class VIGORDataset(Dataset):
 
         if self.pos_only:  # load positives only
             pos_index = 0
-            sat = PIL.Image.open(
-                os.path.join(self.sat_list[self.label[idx][pos_index]])
-            )
-            [row_offset, col_offset] = self.delta[
-                idx, pos_index
-            ]  # delta = [delta_lat, delta_lon]
+            sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
+            [row_offset, col_offset] = self.delta[idx, pos_index]  # delta = [delta_lat, delta_lon]
         else:  # load positives and semi-positives
             col_offset = 320
             row_offset = 320
@@ -242,9 +227,7 @@ class VIGORDataset(Dataset):
                 np.abs(col_offset) >= 320 or np.abs(row_offset) >= 320
             ):  # do not use the semi-positives where GT location is outside the image
                 pos_index = random.randint(0, 3)
-                sat = PIL.Image.open(
-                    os.path.join(self.sat_list[self.label[idx][pos_index]])
-                )
+                sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
                 [row_offset, col_offset] = self.delta[
                     idx, pos_index
                 ]  # delta = [delta_lat, delta_lon]
@@ -276,24 +259,18 @@ class VIGORDataset(Dataset):
             index = int(orientation_angle // 18)
             ratio = (orientation_angle % 18) / 18
             if index == 0:
-                gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
+                gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (1 - ratio)
+                gt_with_ori[19, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
+            else:
+                gt_with_ori[20 - index, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
                     1 - ratio
                 )
-                gt_with_ori[19, :, :] = (
-                    np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
-                )
-            else:
-                gt_with_ori[20 - index, :, :] = np.exp(
-                    -((d - mu) ** 2 / (2.0 * sigma**2))
-                ) * (1 - ratio)
                 gt_with_ori[20 - index - 1, :, :] = (
                     np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
                 )
         gt_with_ori = torch.tensor(gt_with_ori)
 
-        orientation = torch.full(
-            [2, height, width], np.cos(orientation_angle * np.pi / 180)
-        )
+        orientation = torch.full([2, height, width], np.cos(orientation_angle * np.pi / 180))
         orientation[1, :, :] = np.sin(orientation_angle * np.pi / 180)
 
         if "NewYork" in self.grd_list[idx]:
@@ -307,22 +284,30 @@ class VIGORDataset(Dataset):
 
         # print(self.sat_list[self.label[idx][pos_index]])
         # print("at idx ", idx)
+
         if self.use_osm_tiles:
-            return grd, sat, osm_tile, gt, gt_with_ori, orientation, city, orientation_angle
+            return (
+                grd,
+                sat,
+                osm_tile,
+                gt,
+                gt_with_ori,
+                orientation,
+                city,
+                orientation_angle,
+            )
         else:
             return grd, sat, sat, gt, gt_with_ori, orientation, city, orientation_angle
 
     def get_item_sat(self, idx):
-        '''
-           Helper function since when we use osm mode or fusion mode, we can't get both 
+        """
+        Helper function since when we use osm mode or fusion mode, we can't get both
 
-           It may change since fusion is supposed to be done in the model 
-        '''
+        It may change since fusion is supposed to be done in the model
+        """
         if self.pos_only:  # load positives only
             pos_index = 0
-            sat = PIL.Image.open(
-                os.path.join(self.sat_list[self.label[idx][pos_index]])
-            )
+            sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
         else:  # load positives and semi-positives
             col_offset = 320
             row_offset = 320
@@ -330,9 +315,7 @@ class VIGORDataset(Dataset):
                 np.abs(col_offset) >= 320 or np.abs(row_offset) >= 320
             ):  # do not use the semi-positives where GT location is outside the image
                 pos_index = random.randint(0, 3)
-                sat = PIL.Image.open(
-                    os.path.join(self.sat_list[self.label[idx][pos_index]])
-                )
+                sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
                 [row_offset, col_offset] = self.delta[
                     idx, pos_index
                 ]  # delta = [delta_lat, delta_lon]
@@ -344,9 +327,9 @@ class VIGORDataset(Dataset):
         return sat
 
     def get_item_osm(self, idx):
-        '''
-           Same as 'get_item_sat' but for osm 
-        '''
+        """
+        Same as 'get_item_sat' but for osm
+        """
         transform_osm_tile = transforms.Compose(
             [
                 # resize

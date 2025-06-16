@@ -322,21 +322,11 @@ class CVM_VIGOR(nn.Module):
             grd_feature_volume
         )  # length 1280, [8, 1280]
 
-        grd_descriptor2 = self.grd_feature_to_descriptor2(
-            grd_feature_volume
-        )  # length 640, etc
-        grd_descriptor3 = self.grd_feature_to_descriptor3(
-            grd_feature_volume
-        )  # length 320
-        grd_descriptor4 = self.grd_feature_to_descriptor4(
-            grd_feature_volume
-        )  # length 160
-        grd_descriptor5 = self.grd_feature_to_descriptor5(
-            grd_feature_volume
-        )  # length 80
-        grd_descriptor6 = self.grd_feature_to_descriptor6(
-            grd_feature_volume
-        )  # length 40
+        grd_descriptor2 = self.grd_feature_to_descriptor2(grd_feature_volume)  # length 640, etc
+        grd_descriptor3 = self.grd_feature_to_descriptor3(grd_feature_volume)  # length 320
+        grd_descriptor4 = self.grd_feature_to_descriptor4(grd_feature_volume)  # length 160
+        grd_descriptor5 = self.grd_feature_to_descriptor5(grd_feature_volume)  # length 80
+        grd_descriptor6 = self.grd_feature_to_descriptor6(grd_feature_volume)  # length 40
         grd_descriptors = [
             grd_descriptor1,
             grd_descriptor2,
@@ -428,9 +418,7 @@ class CVM_VIGOR(nn.Module):
             .unsqueeze(0)
             .repeat(batch_size, 1, 1, 1)
         )
-        fuse_descriptor_map, a = self.fusion_volume(
-            f_score, sat_descriptor_map, osm_descriptor_map
-        )
+        fuse_descriptor_map, a = self.fusion_volume(f_score, sat_descriptor_map, osm_descriptor_map)
 
         x = fuse_descriptor_map
         matching_score_stacked_list = []
@@ -472,9 +460,8 @@ class CVM_VIGOR(nn.Module):
 
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)
 
-        return (alphas, logits_flattened, heatmap, x_ori) + tuple(
-            matching_score_stacked_list
-        )
+        alphas = torch.Tensor(alphas, dim=1)
+        return (alphas, logits_flattened, heatmap, x_ori) + tuple(matching_score_stacked_list)
 
     def get_descriptor(self, fuse_feature_volume):
         fuse_row_chunks = torch.stack(
@@ -487,32 +474,24 @@ class CVM_VIGOR(nn.Module):
             for j, fuse_chunk in enumerate(torch.unbind(fuse_chunks, dim=-1), 0):
                 if j == 0:
                     fuse_descriptor_row = (
-                        self.fuse_feature_to_descriptors(fuse_chunk)
-                        .unsqueeze(2)
-                        .unsqueeze(3)
+                        self.fuse_feature_to_descriptors(fuse_chunk).unsqueeze(2).unsqueeze(3)
                     )
                 else:
                     fuse_descriptor_row = torch.cat(
                         (
                             fuse_descriptor_row,
-                            self.fuse_feature_to_descriptors(fuse_chunk)
-                            .unsqueeze(2)
-                            .unsqueeze(3),
+                            self.fuse_feature_to_descriptors(fuse_chunk).unsqueeze(2).unsqueeze(3),
                         ),
                         3,
                     )
             if i == 0:
                 fuse_descriptor_map = fuse_descriptor_row
             else:
-                fuse_descriptor_map = torch.cat(
-                    (fuse_descriptor_map, fuse_descriptor_row), 2
-                )
+                fuse_descriptor_map = torch.cat((fuse_descriptor_map, fuse_descriptor_row), 2)
 
         return fuse_descriptor_map
 
-    def compute_matching_score(
-        self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm
-    ):
+    def compute_matching_score(self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm):
         """
         LMU component: rolling and matching part
         TODO: use it once instead
@@ -520,9 +499,7 @@ class CVM_VIGOR(nn.Module):
         for i in range(20):
             sat_descriptor_map_rolled = torch.roll(x, shifts=-i * shift, dims=1)
             sat_descriptor_map_window = sat_descriptor_map_rolled[:, :grd_des_len, :, :]
-            sat_map_norm = torch.norm(
-                sat_descriptor_map_window, p="fro", dim=1, keepdim=True
-            )
+            sat_map_norm = torch.norm(sat_descriptor_map_window, p="fro", dim=1, keepdim=True)
 
             matching_score = torch.sum(
                 (grd_descriptor_map * sat_descriptor_map_window), dim=1, keepdim=True
@@ -530,9 +507,7 @@ class CVM_VIGOR(nn.Module):
             if i == 0:
                 matching_score_stacked = matching_score
             else:
-                matching_score_stacked = torch.cat(
-                    [matching_score_stacked, matching_score], dim=1
-                )
+                matching_score_stacked = torch.cat([matching_score_stacked, matching_score], dim=1)
         matching_score_max, _ = torch.max(matching_score_stacked, dim=1, keepdim=True)
 
         return matching_score_max, matching_score_stacked
@@ -589,31 +564,22 @@ class FusionModule(nn.Module):
     ):
         super().__init__()
 
-        self.ca_osm = CrossAttention(
-            inter_dim, H, W, input_embed_dim, device, need_downsample
-        )
-        self.ca_sat = CrossAttention(
-            inter_dim, H, W, input_embed_dim, device, need_downsample
-        )
+        self.ca_osm = CrossAttention(inter_dim, H, W, input_embed_dim, device, need_downsample)
+        self.ca_sat = CrossAttention(inter_dim, H, W, input_embed_dim, device, need_downsample)
         self.patch_router = PatchRouter(
             embed_dim * patch_size * patch_size,
             H=H,
             W=W,
             patch_size=patch_size,
+            embed_dim=inter_dim,
             need_downsample=need_downsample,
         )
         self.inter_conv = nn.Conv2d(
             in_channels=input_embed_dim, out_channels=inter_dim, kernel_size=1
         )
-        self.conv = nn.Conv2d(
-            in_channels=inter_dim, out_channels=embed_dim, kernel_size=1
-        )
-        self.sat_conv = nn.Conv2d(
-            in_channels=embed_dim, out_channels=inter_dim, kernel_size=1
-        )
-        self.osm_conv = nn.Conv2d(
-            in_channels=embed_dim, out_channels=inter_dim, kernel_size=1
-        )
+        self.conv = nn.Conv2d(in_channels=inter_dim, out_channels=embed_dim, kernel_size=1)
+        self.sat_conv = nn.Conv2d(in_channels=embed_dim, out_channels=inter_dim, kernel_size=1)
+        self.osm_conv = nn.Conv2d(in_channels=embed_dim, out_channels=inter_dim, kernel_size=1)
 
     def forward(self, score, sat, osm):
         score = self.inter_conv(score)
@@ -639,9 +605,7 @@ class CrossAttention(nn.Module):
         if need_downsample:  # score is half the size of current feature
             grd_row_self_ = grd_row_self_[::2]
             grd_row_self_ = grd_row_self_[::2]
-        grd_row_self, grd_col_self = np.meshgrid(
-            grd_row_self_, grd_col_self_, indexing="ij"
-        )
+        grd_row_self, grd_col_self = np.meshgrid(grd_row_self_, grd_col_self_, indexing="ij")
 
         self.reference_points = (
             torch.stack((torch.tensor(grd_col_self), torch.tensor(grd_row_self)), -1)
@@ -674,9 +638,7 @@ class CrossAttention(nn.Module):
         query_flattened = query.flatten(start_dim=2).permute(0, 2, 1)
         value_flattened = value.flatten(start_dim=2).permute(0, 2, 1)
 
-        reference_points = self.reference_points.unsqueeze(0).repeat(
-            query.shape[0], 1, 1, 1
-        )
+        reference_points = self.reference_points.unsqueeze(0).repeat(query.shape[0], 1, 1, 1)
         output = self.attention(
             query=query_flattened,
             value=value_flattened,
@@ -694,9 +656,7 @@ class CrossAttention(nn.Module):
 
 
 class PatchRouter(nn.Module):
-    def __init__(
-        self, D, H, W, patch_size=16, embed_dim=64, hard=False, need_downsample=True
-    ):
+    def __init__(self, D, H, W, patch_size=16, embed_dim=64, hard=False, need_downsample=True):
         super().__init__()
         self.logit = nn.Linear(D, 2)
         self.patch_size = patch_size
@@ -709,13 +669,9 @@ class PatchRouter(nn.Module):
                 stride=2,
                 padding=1,
             ),
-            nn.Conv2d(
-                in_channels=32, out_channels=16, kernel_size=3, stride=2, padding=1
-            ),
+            nn.Conv2d(in_channels=32, out_channels=16, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
-            nn.Conv2d(
-                in_channels=16, out_channels=2, kernel_size=3, stride=2, padding=1
-            ),
+            nn.Conv2d(in_channels=16, out_channels=2, kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
         )
         if need_downsample:
@@ -724,6 +680,7 @@ class PatchRouter(nn.Module):
         else:
             self.patch_H = H
             self.patch_W = W
+        self.embed_dim = embed_dim
 
     def forward(self, p1: torch.Tensor, p2: torch.Tensor, score, temp=0.1):
         B, C, H, W = p1.shape
@@ -742,12 +699,10 @@ class PatchRouter(nn.Module):
             .view(B, self.patch_H // 8 * self.patch_W // 8, 2)  # → (B, N, 2)
         )
         # We rescale in the same fashion as in attention, or we will get mostly 0 and 1
-        scale = D**0.5
+        scale = self.embed_dim**0.5
 
         # 2) gumbel‐softmax into weights
-        weights = F.softmax((logits / scale).flatten(0, 1), dim=-1).view(
-            B, N, 2
-        )  # [B,N,2]
+        weights = F.softmax((logits / scale).flatten(0, 1), dim=-1).view(B, N, 2)  # [B,N,2]
 
         # 3) stack & route: [B,N,2,D] → [B,N,D]
         stacked = torch.stack([p1, p2], dim=2)

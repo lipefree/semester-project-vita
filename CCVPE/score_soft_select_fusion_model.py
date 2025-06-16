@@ -645,7 +645,7 @@ class PatchRouter(nn.Module):
         # logits = self.logit(x)  # [B,N,2]
         # print("logits ", logits.shape)
         # We rescale in the same fashion as in attention, or we will get mostly 0 and 1
-        scale = D**0.5
+        scale = self.embed_dims**0.5
 
         # 2) softmax into weights
         weights = F.softmax((logits / scale).flatten(0, 1), dim=-1).view(

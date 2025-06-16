@@ -120,9 +120,7 @@ class CVM_VIGOR(nn.Module):
             nn.Flatten(start_dim=1),
         )
 
-        self.sat_efficientnet = EfficientNet.from_pretrained(
-            "efficientnet-b0", circular=False
-        )
+        self.sat_efficientnet = EfficientNet.from_pretrained("efficientnet-b0", circular=False)
 
         self.sat_feature_to_descriptors = nn.Sequential(
             nn.Flatten(start_dim=1), nn.Linear(1280 * 2 * 2, 1280)
@@ -130,9 +128,7 @@ class CVM_VIGOR(nn.Module):
 
         self.sat_normalization = normalization(2, 1)
 
-        self.osm_efficientnet = EfficientNet.from_pretrained(
-            "efficientnet-b0", circular=False
-        )
+        self.osm_efficientnet = EfficientNet.from_pretrained("efficientnet-b0", circular=False)
 
         self.osm_feature_to_descriptors = nn.Sequential(
             nn.Flatten(start_dim=1), nn.Linear(1280 * 2 * 2, 1280)
@@ -250,24 +246,12 @@ class CVM_VIGOR(nn.Module):
 
     def forward(self, grd, sat, osm, scores, temp=0.1):
         grd_feature_volume = self.grd_efficientnet.extract_features(grd)
-        grd_descriptor1 = self.grd_feature_to_descriptor1(
-            grd_feature_volume
-        )  # length 1280
-        grd_descriptor2 = self.grd_feature_to_descriptor2(
-            grd_feature_volume
-        )  # length 640
-        grd_descriptor3 = self.grd_feature_to_descriptor3(
-            grd_feature_volume
-        )  # length 320
-        grd_descriptor4 = self.grd_feature_to_descriptor4(
-            grd_feature_volume
-        )  # length 160
-        grd_descriptor5 = self.grd_feature_to_descriptor5(
-            grd_feature_volume
-        )  # length 80
-        grd_descriptor6 = self.grd_feature_to_descriptor6(
-            grd_feature_volume
-        )  # length 40
+        grd_descriptor1 = self.grd_feature_to_descriptor1(grd_feature_volume)  # length 1280
+        grd_descriptor2 = self.grd_feature_to_descriptor2(grd_feature_volume)  # length 640
+        grd_descriptor3 = self.grd_feature_to_descriptor3(grd_feature_volume)  # length 320
+        grd_descriptor4 = self.grd_feature_to_descriptor4(grd_feature_volume)  # length 160
+        grd_descriptor5 = self.grd_feature_to_descriptor5(grd_feature_volume)  # length 80
+        grd_descriptor6 = self.grd_feature_to_descriptor6(grd_feature_volume)  # length 40
 
         grd_descriptors = [
             grd_descriptor1,
@@ -278,24 +262,12 @@ class CVM_VIGOR(nn.Module):
             grd_descriptor6,
         ]
 
-        grd_descriptor_map1 = (
-            grd_descriptor1.unsqueeze(2).unsqueeze(3).repeat(1, 1, 8, 8)
-        )
-        grd_descriptor_map2 = (
-            grd_descriptor2.unsqueeze(2).unsqueeze(3).repeat(1, 1, 16, 16)
-        )
-        grd_descriptor_map3 = (
-            grd_descriptor3.unsqueeze(2).unsqueeze(3).repeat(1, 1, 32, 32)
-        )
-        grd_descriptor_map4 = (
-            grd_descriptor4.unsqueeze(2).unsqueeze(3).repeat(1, 1, 64, 64)
-        )
-        grd_descriptor_map5 = (
-            grd_descriptor5.unsqueeze(2).unsqueeze(3).repeat(1, 1, 128, 128)
-        )
-        grd_descriptor_map6 = (
-            grd_descriptor6.unsqueeze(2).unsqueeze(3).repeat(1, 1, 256, 256)
-        )
+        grd_descriptor_map1 = grd_descriptor1.unsqueeze(2).unsqueeze(3).repeat(1, 1, 8, 8)
+        grd_descriptor_map2 = grd_descriptor2.unsqueeze(2).unsqueeze(3).repeat(1, 1, 16, 16)
+        grd_descriptor_map3 = grd_descriptor3.unsqueeze(2).unsqueeze(3).repeat(1, 1, 32, 32)
+        grd_descriptor_map4 = grd_descriptor4.unsqueeze(2).unsqueeze(3).repeat(1, 1, 64, 64)
+        grd_descriptor_map5 = grd_descriptor5.unsqueeze(2).unsqueeze(3).repeat(1, 1, 128, 128)
+        grd_descriptor_map6 = grd_descriptor6.unsqueeze(2).unsqueeze(3).repeat(1, 1, 256, 256)
 
         grd_descriptor_maps = [
             grd_descriptor_map1,
@@ -306,18 +278,14 @@ class CVM_VIGOR(nn.Module):
             grd_descriptor_map6,
         ]
 
-        sat_feature_volume, multiscale_sat = (
-            self.sat_efficientnet.extract_features_multiscale(sat)
-        )
+        sat_feature_volume, multiscale_sat = self.sat_efficientnet.extract_features_multiscale(sat)
         sat_feature_block0 = multiscale_sat[0]  # [16, 256, 256]
         sat_feature_block2 = multiscale_sat[2]  # [24, 128, 128]
         sat_feature_block4 = multiscale_sat[4]  # [40, 64, 64]
         sat_feature_block10 = multiscale_sat[10]  # [112, 32, 32]
         sat_feature_block15 = multiscale_sat[15]  # [320, 16, 16]
 
-        osm_feature_volume, multiscale_osm = (
-            self.osm_efficientnet.extract_features_multiscale(osm)
-        )
+        osm_feature_volume, multiscale_osm = self.osm_efficientnet.extract_features_multiscale(osm)
 
         osm_feature_block0 = multiscale_osm[0]  # [16, 256, 256]
         osm_feature_block2 = multiscale_osm[2]  # [24, 128, 128]
@@ -331,15 +299,9 @@ class CVM_VIGOR(nn.Module):
         fusion_feature_block10, weights10 = self.router10(
             sat_feature_block10, osm_feature_block10, temp
         )
-        fusion_feature_block4, weights4 = self.router4(
-            sat_feature_block4, osm_feature_block4, temp
-        )
-        fusion_feature_block2, weights2 = self.router2(
-            sat_feature_block2, osm_feature_block2, temp
-        )
-        fusion_feature_block0, weights0 = self.router0(
-            sat_feature_block0, osm_feature_block0, temp
-        )
+        fusion_feature_block4, weights4 = self.router4(sat_feature_block4, osm_feature_block4, temp)
+        fusion_feature_block2, weights2 = self.router2(sat_feature_block2, osm_feature_block2, temp)
+        fusion_feature_block0, weights0 = self.router0(sat_feature_block0, osm_feature_block0, temp)
         fuse_feature_volume, weights_volume = self.router_volume(
             sat_feature_volume, osm_feature_volume, temp
         )
@@ -389,9 +351,7 @@ class CVM_VIGOR(nn.Module):
 
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)
 
-        return (weights, logits_flattened, heatmap, x_ori) + tuple(
-            matching_score_stacked_list
-        )
+        return (weights, logits_flattened, heatmap, x_ori) + tuple(matching_score_stacked_list)
 
     def get_descriptor(self, fuse_feature_volume):
         fuse_row_chunks = torch.stack(
@@ -404,32 +364,24 @@ class CVM_VIGOR(nn.Module):
             for j, fuse_chunk in enumerate(torch.unbind(fuse_chunks, dim=-1), 0):
                 if j == 0:
                     fuse_descriptor_row = (
-                        self.fuse_feature_to_descriptors(fuse_chunk)
-                        .unsqueeze(2)
-                        .unsqueeze(3)
+                        self.fuse_feature_to_descriptors(fuse_chunk).unsqueeze(2).unsqueeze(3)
                     )
                 else:
                     fuse_descriptor_row = torch.cat(
                         (
                             fuse_descriptor_row,
-                            self.fuse_feature_to_descriptors(fuse_chunk)
-                            .unsqueeze(2)
-                            .unsqueeze(3),
+                            self.fuse_feature_to_descriptors(fuse_chunk).unsqueeze(2).unsqueeze(3),
                         ),
                         3,
                     )
             if i == 0:
                 fuse_descriptor_map = fuse_descriptor_row
             else:
-                fuse_descriptor_map = torch.cat(
-                    (fuse_descriptor_map, fuse_descriptor_row), 2
-                )
+                fuse_descriptor_map = torch.cat((fuse_descriptor_map, fuse_descriptor_row), 2)
 
         return fuse_descriptor_map
 
-    def compute_matching_score(
-        self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm
-    ):
+    def compute_matching_score(self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm):
         """
         LMU component: rolling and matching part
         TODO: use it once instead
@@ -437,9 +389,7 @@ class CVM_VIGOR(nn.Module):
         for i in range(20):
             sat_descriptor_map_rolled = torch.roll(x, shifts=-i * shift, dims=1)
             sat_descriptor_map_window = sat_descriptor_map_rolled[:, :grd_des_len, :, :]
-            sat_map_norm = torch.norm(
-                sat_descriptor_map_window, p="fro", dim=1, keepdim=True
-            )
+            sat_map_norm = torch.norm(sat_descriptor_map_window, p="fro", dim=1, keepdim=True)
 
             matching_score = torch.sum(
                 (grd_descriptor_map * sat_descriptor_map_window), dim=1, keepdim=True
@@ -447,9 +397,7 @@ class CVM_VIGOR(nn.Module):
             if i == 0:
                 matching_score_stacked = matching_score
             else:
-                matching_score_stacked = torch.cat(
-                    [matching_score_stacked, matching_score], dim=1
-                )
+                matching_score_stacked = torch.cat([matching_score_stacked, matching_score], dim=1)
         matching_score_max, _ = torch.max(matching_score_stacked, dim=1, keepdim=True)
 
         return matching_score_max, matching_score_stacked
@@ -504,9 +452,9 @@ class PatchRouter(nn.Module):
         logits = self.logit(x)  # [B,N,2]
 
         # 2) gumbel‐softmax into weights
-        weights = F.gumbel_softmax(
-            logits.flatten(0, 1), tau=temp, hard=self.hard, dim=-1
-        ).view(B, N, 2)  # [B,N,2]
+        weights = F.gumbel_softmax(logits.flatten(0, 1), tau=temp, hard=self.hard, dim=-1).view(
+            B, N, 2
+        )  # [B,N,2]
 
         # 3) stack & route: [B,N,2,D] → [B,N,D]
         stacked = torch.stack([p1, p2], dim=2)

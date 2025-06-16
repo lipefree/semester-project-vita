@@ -10,82 +10,89 @@ import numpy as np
 from registry import get_registry
 
 
-base_path = '/work/vita/qngo/test_results'
+base_path = "/work/vita/qngo/test_results"
 # base_path = '/work/vita/qngo/test/test_results'
+
 
 def main():
     # experiment_names = [('hard_select_fusion', 6), ('sat_hard_select_fusion', 7), ('random_score_matching_fusion_rerun', 10), ('score_matching_fusion_rerun', 7)]
-    experiment_names = [('fine_hard_select_fusion', 8)]
-    
-    dataset_root='/work/vita/qngo/VIGOR'
-    batch_size = 32
+    experiment_names = [
+        ("convnext_tiny_score_soft_patch_DAF", 3),
+        ("convnext_small_score_soft_patch_DAF", 5),
+        ("convnext_tiny_fine_score_soft_patch_DAF", 3),
+    ]
+
+    dataset_root = "/work/vita/qngo/VIGOR"
+    batch_size = 24
     fov = 360
     ori_noise = 18 * (180 // 18)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    circular_padding = True # apply circular padding along the horizontal direction in the ground feature extractor
-    area = 'samearea'
-    training = False # test dataset
+    circular_padding = True  # apply circular padding along the horizontal direction in the ground feature extractor
+    area = "samearea"
+    training = False  # test dataset
     pos_only = True
     transform_grd, transform_sat = get_data_transforms()
 
-    vigor = VIGORDataset(dataset_root, 
-                     split=area, 
-                     train=training, 
-                     pos_only=pos_only, 
-                     transform=(transform_grd, transform_sat),
-                     use_osm_tiles=True)
+    vigor = VIGORDataset(
+        dataset_root,
+        split=area,
+        train=training,
+        pos_only=pos_only,
+        transform=(transform_grd, transform_sat),
+        use_osm_tiles=True,
+    )
 
     for experiment_name, epoch in experiment_names:
-        print(f'model name {experiment_name}')
-        print('at epoch ', epoch)
+        print(f"model name {experiment_name}")
+        print("at epoch ", epoch)
         if not os.path.exists(os.path.join(base_path, experiment_name)):
             os.mkdir(os.path.join(base_path, experiment_name))
 
-        writer = SummaryWriter(log_dir=os.path.join('runs', f'{experiment_name}'))
+        writer = SummaryWriter(log_dir=os.path.join("runs", f"{experiment_name}"))
         model_wrapper = get_registry(experiment_name)(experiment_name, device)
 
         base_model_path = "/work/vita/qngo/models/VIGOR/"
         load_model(model_wrapper, base_model_path, experiment_name, epoch=epoch)
-        distances = run_test_dataset(experiment_name,
-                         dataset=vigor, 
-                         model_wrapper=model_wrapper, 
-                         batch_size=batch_size,
-                         device=device,
-                         base_path=base_path,
-                         debug=(debug:=False))
-        
+        distances = run_test_dataset(
+            experiment_name,
+            dataset=vigor,
+            model_wrapper=model_wrapper,
+            batch_size=batch_size,
+            device=device,
+            base_path=base_path,
+            debug=(debug := False),
+        )
+
         save_distances(experiment_name, distances, base_path)
-        writer.add_scalar("Test/mean_distance", 
-                          np.mean(distances), 
-                          0)
-        writer.add_scalar("Test/median_distance", 
-                          np.median(distances), 
-                          0)
+        writer.add_scalar("Test/mean_distance", np.mean(distances), 0)
+        writer.add_scalar("Test/median_distance", np.median(distances), 0)
 
 
-def run_test_dataset(experiment_name, dataset, model_wrapper, batch_size, device, base_path, debug=False):
-    '''
-      This method became very complicated because I tried to save the heatmaps but the GPU could not allocated
-      the whole tensor at once. It results in a strategy where we load off the gpu when reaching {limit_heatmaps_size}
-      samples to a numpy array on CPU.
+def run_test_dataset(
+    experiment_name, dataset, model_wrapper, batch_size, device, base_path, debug=False
+):
+    """
+    This method became very complicated because I tried to save the heatmaps but the GPU could not allocated
+    the whole tensor at once. It results in a strategy where we load off the gpu when reaching {limit_heatmaps_size}
+    samples to a numpy array on CPU.
 
-      We pre-allocate a lot of stuff because it was taking more than a day before, but with all the optimization we are
-      now at around 3h with this configuration.  
-    '''
+    We pre-allocate a lot of stuff because it was taking more than a day before, but with all the optimization we are
+    now at around 3h with this configuration.
+    """
     model_wrapper.set_model_to_eval()
     if debug:
         dataset = Subset(dataset, [i for i in range(102)])
     test_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-    print('len dataset ', len(dataset))
-    print('data loader len ', len(test_dataloader))
+    print("len dataset ", len(dataset))
+    print("data loader len ", len(test_dataloader))
     limit_heatmaps_size = 200
 
     np_heatmaps = np.zeros((len(dataset), 512, 512))
 
     with torch.no_grad():
         distance_in_meters = []
-        
-        heatmaps = torch.zeros(limit_heatmaps_size*batch_size, 1, 512, 512, device=device)
+
+        heatmaps = torch.zeros(limit_heatmaps_size * batch_size, 1, 512, 512, device=device)
         items_in_h = 0
         for i, data in enumerate(tqdm(test_dataloader), 0):
             processed_data = process_data(data, device)
@@ -95,23 +102,29 @@ def run_test_dataset(experiment_name, dataset, model_wrapper, batch_size, device
             # offload from gpu
             distances_cpu = distances.cpu().detach().tolist()
             distance_in_meters.extend(distances_cpu)
-            
+
             current_batch_size = heatmap.shape[0]
 
-            heatmaps[items_in_h*batch_size: items_in_h*batch_size + current_batch_size] = heatmap
+            heatmaps[items_in_h * batch_size : items_in_h * batch_size + current_batch_size] = (
+                heatmap
+            )
             items_in_h += 1
 
             if items_in_h >= limit_heatmaps_size:
                 cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
                 # 0, 96 (32*3), 96, 96*2
-                np_heatmaps[batch_size*(i + 1 - limit_heatmaps_size): batch_size*i + current_batch_size] = cpu_heatmaps
+                np_heatmaps[
+                    batch_size * (i + 1 - limit_heatmaps_size) : batch_size * i + current_batch_size
+                ] = cpu_heatmaps
                 items_in_h = 0
                 # heatmaps = torch.zeros(limit_heatmaps_size*batch_size, 1, 512, 512, device=device)
-                
+
         # handle last remaining items
         if items_in_h > 0:
             cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
-            np_heatmaps[-((items_in_h - 1)*batch_size + current_batch_size):] = cpu_heatmaps[:(items_in_h - 1)*batch_size+current_batch_size]
+            np_heatmaps[-((items_in_h - 1) * batch_size + current_batch_size) :] = cpu_heatmaps[
+                : (items_in_h - 1) * batch_size + current_batch_size
+            ]
 
         heatmaps = np_heatmaps
         # save_heatmap(experiment_name, heatmaps, len(dataset), base_path)
@@ -122,8 +135,8 @@ def run_test_dataset(experiment_name, dataset, model_wrapper, batch_size, device
 def save_distances(experiment_name, distances, base_path):
     save_qual = os.path.join(base_path, experiment_name, "distance_test.npy")
 
-    print('save distances of ', len(distances))
-    print('recorded mean is ', np.mean(distances))
+    print("save distances of ", len(distances))
+    print("recorded mean is ", np.mean(distances))
     with open(save_qual, "wb") as f:
         np.save(f, distances)
 
@@ -133,9 +146,8 @@ def load_distances(experiment_name, base_path):
 
 
 def save_heatmap(experiment_name, heatmaps, items, base_path):
-    filepath = f'{base_path}/{experiment_name}/heatmaps.npz'
+    filepath = f"{base_path}/{experiment_name}/heatmaps.npz"
     append_heatmap(filepath, heatmaps, items)
-
 
 
 def append_heatmap(npz_path, heatmaps, nbr_items):
@@ -165,20 +177,19 @@ def compute_distances(data, heatmap):
 
     # distances in pixels
     pixel_distances = torch.sqrt(
-        (row_gt.float()  - row_pred.float()).pow(2) +
-        (col_gt.float()  - col_pred.float()).pow(2)
+        (row_gt.float() - row_pred.float()).pow(2) + (col_gt.float() - col_pred.float()).pow(2)
     )
 
     # city → scale mapping
     scale_map = {
-        'NewYork':      0.113248/512*640,
-        'Seattle':      0.100817/512*640,
-        'SanFrancisco': 0.118141/512*640,
-        'Chicago':      0.111262/512*640,
+        "NewYork": 0.113248 / 512 * 640,
+        "Seattle": 0.100817 / 512 * 640,
+        "SanFrancisco": 0.118141 / 512 * 640,
+        "Chicago": 0.111262 / 512 * 640,
     }
-    scales = torch.tensor([scale_map[c] for c in city],
-                          device=pixel_distances.device,
-                          dtype=pixel_distances.dtype)
+    scales = torch.tensor(
+        [scale_map[c] for c in city], device=pixel_distances.device, dtype=pixel_distances.dtype
+    )
 
     meter_distances = pixel_distances * scales
     return meter_distances
