@@ -10,3 +10,4 @@ CCVPE/refactor/
 CCVPE/runs
 CCVPE/fused_images
 CCVPE/weights/
+CCVPE/wandb/

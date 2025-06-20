@@ -18,13 +18,12 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader, Subset
 import torch.nn as nn
 
+
 def get_meter_distance(loc_gt, loc_pred, city: str, batch_idx) -> float:
     """
     distance in meters between groundtruth location (x,y) and predicted one
     """
-    pixel_distance = np.sqrt(
-        (loc_gt[0] - loc_pred[0]) ** 2 + (loc_gt[1] - loc_pred[1]) ** 2
-    )
+    pixel_distance = np.sqrt((loc_gt[0] - loc_pred[0]) ** 2 + (loc_gt[1] - loc_pred[1]) ** 2)
     meter_distance = -1
     if city == "NewYork":
         meter_distance = pixel_distance * 0.113248 / 512 * 640
@@ -43,11 +42,12 @@ def get_meter_distance(loc_gt, loc_pred, city: str, batch_idx) -> float:
 
 def get_images(idx, dataset):
     grd, sat, osm, gt, _, orientation, city, _ = dataset.__getitem__(idx)
-    invTrans = transforms.Compose([ transforms.Normalize(mean = [ 0., 0., 0. ],
-                                                     std = [ 1/0.229, 1/0.224, 1/0.225 ]),
-                                transforms.Normalize(mean = [ -0.485, -0.456, -0.406 ],
-                                                     std = [ 1., 1., 1. ]),
-                               ])
+    invTrans = transforms.Compose(
+        [
+            transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),
+            transforms.Normalize(mean=[-0.485, -0.456, -0.406], std=[1.0, 1.0, 1.0]),
+        ]
+    )
 
     grd = invTrans(grd)
     sat = invTrans(sat)
@@ -56,23 +56,26 @@ def get_images(idx, dataset):
 
 
 def show_ground(grd):
-    plt.figure(figsize=(8,12))
-    plt.imshow(  grd.permute(1, 2, 0)  )
-    plt.axvline(grd.size()[2]/2, color='g')
-    plt.axis('off')
+    plt.figure(figsize=(8, 12))
+    plt.imshow(grd.permute(1, 2, 0))
+    plt.axvline(grd.size()[2] / 2, color="g")
+    plt.axis("off")
 
 
 def get_heatmap_array(experiment_name, base_test_result_path):
-    heatmaps_file_path = f'{base_test_result_path}{experiment_name}/heatmaps.npz'
+    heatmaps_file_path = f"{base_test_result_path}{experiment_name}/heatmaps.npz"
     return np.load(heatmaps_file_path)
 
+
 def get_distance_array(experiment_name, best_test_result_path):
-    distance_array_path = f'{best_test_result_path}{experiment_name}/distance_test.npy'
+    distance_array_path = f"{best_test_result_path}{experiment_name}/distance_test.npy"
     return np.load(distance_array_path)
+
 
 def get_heatmap(heatmap_array, idx):
     key = f"heatmap_{idx}"
     return heatmap_array[key].squeeze(0)
+
 
 def show_image_rot(sat, grd, heatmap, gt, gt_orientation, pred_orientation):
     # plt.figure(figsize=(8,12))
@@ -83,7 +86,7 @@ def show_image_rot(sat, grd, heatmap, gt, gt_orientation, pred_orientation):
     loc_pred = np.unravel_index(heatmap.argmax(), heatmap.shape)
     loc_gt = np.unravel_index(gt.argmax(), gt.shape)
 
-    print('show image gt ori shape', gt_orientation.shape)
+    print("show image gt ori shape", gt_orientation.shape)
     orientation = gt_orientation.squeeze(0).permute(1, 2, 0).cpu().detach().numpy()
     ori = torch.squeeze(pred_orientation, dim=0).permute(1, 2, 0)
     ori = ori.cpu().detach().numpy()
@@ -94,54 +97,110 @@ def show_image_rot(sat, grd, heatmap, gt, gt_orientation, pred_orientation):
     a_acos_gt = math.acos(cos_gt)
     if sin_gt < 0:
         angle_gt = math.degrees(-a_acos_gt) % 360
-    else: 
+    else:
         angle_gt = math.degrees(a_acos_gt)
-    
-    plt.figure(figsize=(6,6))
-    plt.imshow(  sat.permute(1, 2, 0)  )
-    plt.imshow(heatmap,  norm=LogNorm(vmax=np.max(heatmap)), alpha=0.4, cmap='Reds')
-    plt.scatter(loc_gt[1], loc_gt[0], s=300, marker='^', facecolor='g', label='GT', edgecolors='white')
-    plt.scatter(loc_pred[1], loc_pred[0], s=300, marker='*', facecolor='gold', label='Ours', edgecolors='white')
-    xx,yy = np.meshgrid(np.linspace(0,512,512),np.linspace(0,512,512))
-    cos_angle = ori[:,:,0]
-    sin_angle = ori[:,:,1]
-    # plt.quiver(xx[::40, ::40], yy[::40, ::40], -sin_pred_dense[::40, ::40], cos_pred_dense[::40, ::40], linewidths=0.2, scale=14, width=0.01) # plot the predicted rotation angle + 90 degrees
-    plt.quiver(loc_pred[1], loc_pred[0], -sin_pred, cos_pred, color='gold', linewidths=0.2, scale=10, width=0.015)
-    plt.quiver(loc_gt[1], loc_gt[0], -np.sin(angle_gt / 180 * np.pi), np.cos(angle_gt / 180 * np.pi), color='g', linewidths=0.2, scale=10, width=0.015)
-    plt.axis('off')
-    plt.legend(loc=2, framealpha=0.8, labelcolor='black', prop={'size': 15})
+
+    plt.figure(figsize=(6, 6))
+    plt.imshow(sat.permute(1, 2, 0))
+    plt.imshow(heatmap, norm=LogNorm(vmax=np.max(heatmap)), alpha=0.4, cmap="Reds")
+    plt.scatter(
+        loc_gt[1], loc_gt[0], s=300, marker="^", facecolor="g", label="GT", edgecolors="white"
+    )
+    plt.scatter(
+        loc_pred[1],
+        loc_pred[0],
+        s=300,
+        marker="*",
+        facecolor="gold",
+        label="Ours",
+        edgecolors="white",
+    )
+    xx, yy = np.meshgrid(np.linspace(0, 512, 512), np.linspace(0, 512, 512))
+    cos_angle = ori[:, :, 0]
+    sin_angle = ori[:, :, 1]
+    plt.quiver(
+        xx[::40, ::40],
+        yy[::40, ::40],
+        -sin_pred_dense[::40, ::40],
+        cos_pred_dense[::40, ::40],
+        linewidths=0.2,
+        scale=14,
+        width=0.01,
+    )  # plot the predicted rotation angle + 90 degrees
+    plt.quiver(
+        loc_pred[1],
+        loc_pred[0],
+        -sin_pred,
+        cos_pred,
+        color="gold",
+        linewidths=0.2,
+        scale=10,
+        width=0.015,
+    )
+    plt.quiver(
+        loc_gt[1],
+        loc_gt[0],
+        -np.sin(angle_gt / 180 * np.pi),
+        np.cos(angle_gt / 180 * np.pi),
+        color="g",
+        linewidths=0.2,
+        scale=10,
+        width=0.015,
+    )
+    plt.axis("off")
+    plt.legend(loc=2, framealpha=0.8, labelcolor="black", prop={"size": 15})
 
 
 def show_image(sat, grd, heatmap, gt):
     gt = gt.permute(1, 2, 0)
     loc_pred = np.unravel_index(heatmap.argmax(), heatmap.shape)
     loc_gt = np.unravel_index(gt.argmax(), gt.shape)
-    plt.figure(figsize=(6,6))
-    plt.imshow(  sat.permute(1, 2, 0)  )
-    plt.imshow(heatmap,  norm=LogNorm(vmax=np.max(heatmap)), alpha=0.4, cmap='Reds')
-    plt.scatter(loc_gt[1], loc_gt[0], s=300, marker='^', facecolor='g', label='GT', edgecolors='white')
-    plt.scatter(loc_pred[1], loc_pred[0], s=300, marker='*', facecolor='gold', label='Ours', edgecolors='white')
-    xx,yy = np.meshgrid(np.linspace(0,512,512),np.linspace(0,512,512))
-    plt.axis('off')
-    plt.legend(loc=2, framealpha=0.8, labelcolor='black', prop={'size': 15})
+    plt.figure(figsize=(6, 6))
+    plt.imshow(sat.permute(1, 2, 0))
+    plt.imshow(heatmap, norm=LogNorm(vmax=np.max(heatmap)), alpha=0.4, cmap="Reds")
+    plt.scatter(
+        loc_gt[1], loc_gt[0], s=300, marker="^", facecolor="g", label="GT", edgecolors="white"
+    )
+    plt.scatter(
+        loc_pred[1],
+        loc_pred[0],
+        s=300,
+        marker="*",
+        facecolor="gold",
+        label="Ours",
+        edgecolors="white",
+    )
+    xx, yy = np.meshgrid(np.linspace(0, 512, 512), np.linspace(0, 512, 512))
+    plt.axis("off")
+    plt.legend(loc=2, framealpha=0.8, labelcolor="black", prop={"size": 15})
+
 
 def show_image_subplot(sat, grd, heatmap, gt, n, m, axs, title):
     gt = gt.permute(1, 2, 0)
     loc_pred = np.unravel_index(heatmap.argmax(), heatmap.shape)
     loc_gt = np.unravel_index(gt.argmax(), gt.shape)
-    axs[n, m].imshow(  sat.permute(1, 2, 0)  )
-    axs[n, m].imshow(heatmap,  norm=LogNorm(vmax=np.max(heatmap)), alpha=0.4, cmap='Reds')
-    axs[n, m].scatter(loc_gt[1], loc_gt[0], s=300, marker='^', facecolor='g', label='GT', edgecolors='white')
-    axs[n, m].scatter(loc_pred[1], loc_pred[0], s=300, marker='*', facecolor='gold', label='Ours', edgecolors='white')
-    xx,yy = np.meshgrid(np.linspace(0,512,512),np.linspace(0,512,512))
-    axs[n, m].axis('off')
-    axs[n, m].legend(loc=2, framealpha=0.8, labelcolor='black', prop={'size': 15})
+    axs[n, m].imshow(sat.permute(1, 2, 0))
+    axs[n, m].imshow(heatmap, norm=LogNorm(vmax=np.max(heatmap)), alpha=0.4, cmap="Reds")
+    axs[n, m].scatter(
+        loc_gt[1], loc_gt[0], s=300, marker="^", facecolor="g", label="GT", edgecolors="white"
+    )
+    axs[n, m].scatter(
+        loc_pred[1],
+        loc_pred[0],
+        s=300,
+        marker="*",
+        facecolor="gold",
+        label="Ours",
+        edgecolors="white",
+    )
+    xx, yy = np.meshgrid(np.linspace(0, 512, 512), np.linspace(0, 512, 512))
+    axs[n, m].axis("off")
+    axs[n, m].legend(loc=2, framealpha=0.8, labelcolor="black", prop={"size": 15})
     axs[n, m].title.set_text(title)
-    
+
+
 class QualitativeUtils:
-
     def __init__(self, model, model_name, epoch, dataset=None):
-
         # Load model
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         base_model_path = "/work/vita/qngo/models/VIGOR/"
@@ -215,9 +274,7 @@ class QualitativeUtils:
                     current_gt = gt[batch_idx, :, :, :]
                     loc_gt = np.unravel_index(current_gt.argmax(), current_gt.shape)
                     current_pred = heatmap[batch_idx, :, :, :]
-                    loc_pred = np.unravel_index(
-                        current_pred.argmax(), current_pred.shape
-                    )
+                    loc_pred = np.unravel_index(current_pred.argmax(), current_pred.shape)
                     pixel_distance = np.sqrt(
                         (loc_gt[1] - loc_pred[1]) ** 2 + (loc_gt[2] - loc_pred[2]) ** 2
                     )
@@ -239,9 +296,7 @@ class QualitativeUtils:
                             angle_pred = math.degrees(-a_acos_pred) % 360
                         else:
                             angle_pred = math.degrees(a_acos_pred)
-                        cos_gt, sin_gt = gt_orientation[
-                            batch_idx, :, loc_gt[1], loc_gt[2]
-                        ]
+                        cos_gt, sin_gt = gt_orientation[batch_idx, :, loc_gt[1], loc_gt[2]]
                         a_acos_gt = math.acos(cos_gt)
                         if sin_gt < 0:
                             angle_gt = math.degrees(-a_acos_gt) % 360
@@ -257,9 +312,7 @@ class QualitativeUtils:
                             )
                         )
 
-                    probability_at_gt.append(
-                        heatmap[batch_idx, 0, loc_gt[1], loc_gt[2]]
-                    )
+                    probability_at_gt.append(heatmap[batch_idx, 0, loc_gt[1], loc_gt[2]])
 
             if i % 20 == 0:
                 print(np.mean(distance_in_meters))
@@ -279,12 +332,8 @@ class QualitativeUtils:
 
         invTrans = transforms.Compose(
             [
-                transforms.Normalize(
-                    mean=[0.0, 0.0, 0.0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]
-                ),
-                transforms.Normalize(
-                    mean=[-0.485, -0.456, -0.406], std=[1.0, 1.0, 1.0]
-                ),
+                transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / 0.229, 1 / 0.224, 1 / 0.225]),
+                transforms.Normalize(mean=[-0.485, -0.456, -0.406], std=[1.0, 1.0, 1.0]),
             ]
         )
 

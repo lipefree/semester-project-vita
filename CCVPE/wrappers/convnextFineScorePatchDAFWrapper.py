@@ -92,9 +92,7 @@ class ConvNextFineScorePatchDAFWrapper:
             matching_score_stacked6,
         ) = output
 
-        losses = self.compute_loss(
-            output[1:], gt, gt_orientation, gt_with_ori, osm, sat
-        )
+        losses = self.compute_loss(output[1:], gt, gt_orientation, gt_with_ori, osm, sat)
         return output, losses, heatmap
 
     def set_model_to_train(self):
@@ -107,9 +105,7 @@ class ConvNextFineScorePatchDAFWrapper:
         grd, sat, osm, gt, gt_with_ori, gt_orientation, city, gt_flattened = data
         output, losses, heatmap = self.infer(data)
 
-        losses = self.compute_loss(
-            output[1:], gt, gt_orientation, gt_with_ori, osm, sat
-        )
+        losses = self.compute_loss(output[1:], gt, gt_orientation, gt_with_ori, osm, sat)
 
         validation_state["loss"].append(losses[0].item())
         validation_state["loss_ce"].append(losses[1].item())
@@ -131,13 +127,9 @@ class ConvNextFineScorePatchDAFWrapper:
         loss_ori = np.mean(validation_state["loss_ori"])
         loss_fusion = np.mean(validation_state["loss_image"])
 
-        self.log_loss(
-            "Validation", epoch, writer, loss, loss_ce, loss_infonce, loss_ori
-        )
+        self.log_loss("Validation", epoch, writer, loss, loss_ce, loss_infonce, loss_ori)
 
-        writer.add_scalar(
-            "Validation/mean_distance", np.mean(validation_state["distance"]), epoch
-        )
+        writer.add_scalar("Validation/mean_distance", np.mean(validation_state["distance"]), epoch)
         writer.add_scalar(
             "Validation/median_distance", np.median(validation_state["distance"]), epoch
         )
@@ -180,9 +172,7 @@ class ConvNextFineScorePatchDAFWrapper:
         for batch_idx in range(gt.shape[0]):
             loc_pred = get_location(heatmap[batch_idx, :, :, :])
             loc_gt = get_location(gt[batch_idx, :, :, :])
-            meter_distance = get_meter_distance(
-                loc_gt, loc_pred, city[batch_idx], batch_idx
-            )
+            meter_distance = get_meter_distance(loc_gt, loc_pred, city[batch_idx], batch_idx)
             distances.append(meter_distance)
 
             orientation_distance = get_orientation_distance(
@@ -230,9 +220,7 @@ class ConvNextFineScorePatchDAFWrapper:
 
         return loss, loss_ce, loss_infonce, loss_ori
 
-    def log_loss(
-        self, stage_name, global_step, writer, loss, loss_ce, loss_infonce, loss_ori
-    ):
+    def log_loss(self, stage_name, global_step, writer, loss, loss_ce, loss_infonce, loss_ori):
         writer.add_scalar(f"{stage_name}/loss_ce", loss_ce, global_step)
         writer.add_scalar(f"{stage_name}/loss_infonce", loss_infonce, global_step)
         writer.add_scalar(f"{stage_name}/loss_ori", loss_ori, global_step)
@@ -242,7 +230,7 @@ class ConvNextFineScorePatchDAFWrapper:
         print("log metric")
         grd, sat, osm, gt, gt_with_ori, gt_orientation, city, gt_flattened = data
         (
-            alpha,
+            weights,
             logits_flattened,
             heatmap,
             ori,
@@ -265,9 +253,7 @@ class ConvNextFineScorePatchDAFWrapper:
         for batch_idx in range(len(city)):
             loc_pred = get_location(heatmap[batch_idx, :, :, :])
             loc_gt = get_location(gt[batch_idx, :, :, :])
-            meter_distance = get_meter_distance(
-                loc_gt, loc_pred, city[batch_idx], batch_idx
-            )
+            meter_distance = get_meter_distance(loc_gt, loc_pred, city[batch_idx], batch_idx)
             distance.append(meter_distance)
 
             orientation_distance = get_orientation_distance(
@@ -277,6 +263,8 @@ class ConvNextFineScorePatchDAFWrapper:
             if orientation_distance is not None:
                 orientation_error.append(orientation_distance)
 
+        t1, t2 = weights.unbind(dim=-1)
+        mean_choice = (t1 - t2).mean().cpu().detach().numpy()
         writer.add_scalar("Train/mean_distance", np.mean(distance), global_step)
         writer.add_scalar("Train/median_distance", np.median(distance), global_step)
         writer.add_scalar(
@@ -289,6 +277,8 @@ class ConvNextFineScorePatchDAFWrapper:
             np.median(orientation_error),
             global_step,
         )
+
+        writer.add_scalar("Train/mean_choice", mean_choice, global_step)
 
         self.running_loss = 0.0
         writer.flush()

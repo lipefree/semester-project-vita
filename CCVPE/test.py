@@ -8,6 +8,7 @@ from utils import get_data_transforms, process_data
 from tqdm import tqdm
 import numpy as np
 from registry import get_registry
+import wandb
 
 
 base_path = "/work/vita/qngo/test_results"
@@ -17,15 +18,14 @@ base_path = "/work/vita/qngo/test_results"
 def main():
     # experiment_names = [('hard_select_fusion', 6), ('sat_hard_select_fusion', 7), ('random_score_matching_fusion_rerun', 10), ('score_matching_fusion_rerun', 7)]
     experiment_names = [
-        ("convnext_tiny_score_soft_patch_DAF", 3),
-        ("convnext_small_score_soft_patch_DAF", 5),
-        ("convnext_tiny_fine_score_soft_patch_DAF", 3),
+        ("soft_patch_DAF_v3", 8),
     ]
 
     dataset_root = "/work/vita/qngo/VIGOR"
-    batch_size = 24
+    batch_size = 64
     fov = 360
-    ori_noise = 18 * (180 // 18)
+    ori_noise = 0
+    use_augment = True
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     circular_padding = True  # apply circular padding along the horizontal direction in the ground feature extractor
     area = "samearea"
@@ -40,6 +40,7 @@ def main():
         pos_only=pos_only,
         transform=(transform_grd, transform_sat),
         use_osm_tiles=True,
+        ori_noise=ori_noise,
     )
 
     for experiment_name, epoch in experiment_names:
@@ -48,9 +49,17 @@ def main():
         if not os.path.exists(os.path.join(base_path, experiment_name)):
             os.mkdir(os.path.join(base_path, experiment_name))
 
-        writer = SummaryWriter(log_dir=os.path.join("runs", f"{experiment_name}"))
         model_wrapper = get_registry(experiment_name)(experiment_name, device)
+        if use_augment:
+            experiment_name += "_use-augment"
+        else:
+            experiment_name += "_no-augment"
 
+        if ori_noise == 0:
+            experiment_name += "_known-orientation"
+
+        writer = SummaryWriter(log_dir=os.path.join("runs", f"{experiment_name}"))
+        wandb.init(project="VITA", name=experiment_name + "_test")
         base_model_path = "/work/vita/qngo/models/VIGOR/"
         load_model(model_wrapper, base_model_path, experiment_name, epoch=epoch)
         distances = run_test_dataset(
@@ -87,12 +96,12 @@ def run_test_dataset(
     print("data loader len ", len(test_dataloader))
     limit_heatmaps_size = 200
 
-    np_heatmaps = np.zeros((len(dataset), 512, 512))
+    # np_heatmaps = np.zeros((len(dataset), 512, 512))
 
     with torch.no_grad():
         distance_in_meters = []
 
-        heatmaps = torch.zeros(limit_heatmaps_size * batch_size, 1, 512, 512, device=device)
+        # heatmaps = torch.zeros(limit_heatmaps_size * batch_size, 1, 512, 512, device=device)
         items_in_h = 0
         for i, data in enumerate(tqdm(test_dataloader), 0):
             processed_data = process_data(data, device)
@@ -105,28 +114,28 @@ def run_test_dataset(
 
             current_batch_size = heatmap.shape[0]
 
-            heatmaps[items_in_h * batch_size : items_in_h * batch_size + current_batch_size] = (
-                heatmap
-            )
-            items_in_h += 1
+            # heatmaps[items_in_h * batch_size : items_in_h * batch_size + current_batch_size] = (
+            #     heatmap
+            # )
+            # items_in_h += 1
 
-            if items_in_h >= limit_heatmaps_size:
-                cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
-                # 0, 96 (32*3), 96, 96*2
-                np_heatmaps[
-                    batch_size * (i + 1 - limit_heatmaps_size) : batch_size * i + current_batch_size
-                ] = cpu_heatmaps
-                items_in_h = 0
-                # heatmaps = torch.zeros(limit_heatmaps_size*batch_size, 1, 512, 512, device=device)
+            # if items_in_h >= limit_heatmaps_size:
+            #     cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
+            #     # 0, 96 (32*3), 96, 96*2
+            #     np_heatmaps[
+            #         batch_size * (i + 1 - limit_heatmaps_size) : batch_size * i + current_batch_size
+            #     ] = cpu_heatmaps
+            #     items_in_h = 0
+            #     # heatmaps = torch.zeros(limit_heatmaps_size*batch_size, 1, 512, 512, device=device)
 
         # handle last remaining items
-        if items_in_h > 0:
-            cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
-            np_heatmaps[-((items_in_h - 1) * batch_size + current_batch_size) :] = cpu_heatmaps[
-                : (items_in_h - 1) * batch_size + current_batch_size
-            ]
+        # if items_in_h > 0:
+        #     cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
+        #     np_heatmaps[-((items_in_h - 1) * batch_size + current_batch_size) :] = cpu_heatmaps[
+        #         : (items_in_h - 1) * batch_size + current_batch_size
+        #     ]
 
-        heatmaps = np_heatmaps
+        # heatmaps = np_heatmaps
         # save_heatmap(experiment_name, heatmaps, len(dataset), base_path)
 
     return distance_in_meters

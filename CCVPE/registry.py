@@ -20,6 +20,8 @@ from wrappers.scorePatchDAFWrapper import ScorePatchDAFWrapper
 from wrappers.convnextScorePatchDAFWrapper import ConvNextScorePatchDAFWrapper
 from wrappers.convnextFineScorePatchDAFWrapper import ConvNextFineScorePatchDAFWrapper
 from wrappers.scoreFineSoftSelectWrapper import ScoreFinePatchDAFWrapper
+from wrappers.patchDAFV3Wrapper import PatchDAFV3Wrapper
+from wrappers.softSelectV3Wrapper import SoftSelectV3Wrapper
 from functools import partial
 
 """
@@ -178,6 +180,16 @@ registry = {
         ScoreFinePatchDAFWrapper
     ),  # missleading name: its actually score matching guided fusion at a patch level with soft selection
     "score_fine_soft_patch_DAF": partial(ScoreFinePatchDAFWrapper),
+    "soft_patch_DAF_v3_debug": partial(  # v2 fixes softmax scaling
+        PatchDAFV3Wrapper
+    ),  # missleading name: its actually score matching guided fusion at a patch level with soft selection
+    "soft_patch_DAF_v3": partial(PatchDAFV3Wrapper),
+    "soft_select_fusion_v3": partial(
+        SoftSelectV3Wrapper
+    ),  # select at a patch level but soft, but with rescale
+    "soft_select_fusion_v3_debug": partial(
+        SoftSelectV3Wrapper
+    ),  # select at a patch level but soft, but with rescale
 }
 
 

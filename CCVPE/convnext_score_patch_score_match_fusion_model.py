@@ -58,7 +58,7 @@ class CVM_VIGOR(nn.Module):
         alpha_type=0,
         convnext_type="small",
     ):
-        super(CVM_VIGOR, self).__init__()
+        super().__init__()
         self.device = device
         self.circular_padding = circular_padding
         self.use_adapt = use_adapt  # If using osm tiles with 50 layers
@@ -460,7 +460,7 @@ class CVM_VIGOR(nn.Module):
 
         x_ori = nn.functional.normalize(x_ori, p=2, dim=1)
 
-        alphas = torch.Tensor(alphas, dim=1)
+        alphas = torch.cat(alphas, dim=1)
         return (alphas, logits_flattened, heatmap, x_ori) + tuple(matching_score_stacked_list)
 
     def get_descriptor(self, fuse_feature_volume):
@@ -681,6 +681,7 @@ class PatchRouter(nn.Module):
             self.patch_H = H
             self.patch_W = W
         self.embed_dim = embed_dim
+        self.D = D
 
     def forward(self, p1: torch.Tensor, p2: torch.Tensor, score, temp=0.1):
         B, C, H, W = p1.shape
@@ -692,6 +693,10 @@ class PatchRouter(nn.Module):
 
         B, N, D = p1.shape  # now N = (H/ph)*(W/pw), D = C*ph*pw
         # 1) score each patch
+        print("------")
+        print("score shape ", score.shape)
+        print("D shape ", self.D)
+        print("=======")
         logits = self.conv_block(score)
         logits = (
             logits.permute(0, 2, 3, 1)  # → (B, H, W, C)

@@ -228,7 +228,7 @@ class ScoreFinePatchDAFWrapper:
         print("log metric")
         grd, sat, osm, gt, gt_with_ori, gt_orientation, city, gt_flattened = data
         (
-            alpha,
+            weights,
             logits_flattened,
             heatmap,
             ori,
@@ -261,6 +261,8 @@ class ScoreFinePatchDAFWrapper:
             if orientation_distance is not None:
                 orientation_error.append(orientation_distance)
 
+        t1, t2 = weights.unbind(dim=-1)
+        mean_choice = (t1 - t2).mean().cpu().detach().numpy()
         writer.add_scalar("Train/mean_distance", np.mean(distance), global_step)
         writer.add_scalar("Train/median_distance", np.median(distance), global_step)
         writer.add_scalar(
@@ -273,6 +275,8 @@ class ScoreFinePatchDAFWrapper:
             np.median(orientation_error),
             global_step,
         )
+
+        writer.add_scalar("Train/mean_choice", mean_choice, global_step)
 
         self.running_loss = 0.0
         writer.flush()

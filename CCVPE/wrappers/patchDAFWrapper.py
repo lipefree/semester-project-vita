@@ -90,9 +90,7 @@ class PatchDAFWrapper:
             matching_score_stacked6,
         ) = output
 
-        losses = self.compute_loss(
-            output[1:], gt, gt_orientation, gt_with_ori, osm, sat
-        )
+        losses = self.compute_loss(output[1:], gt, gt_orientation, gt_with_ori, osm, sat)
         return output, losses, heatmap
 
     def set_model_to_train(self):
@@ -105,9 +103,7 @@ class PatchDAFWrapper:
         grd, sat, osm, gt, gt_with_ori, gt_orientation, city, gt_flattened = data
         output, losses, heatmap = self.infer(data)
 
-        losses = self.compute_loss(
-            output[1:], gt, gt_orientation, gt_with_ori, osm, sat
-        )
+        losses = self.compute_loss(output[1:], gt, gt_orientation, gt_with_ori, osm, sat)
 
         validation_state["loss"].append(losses[0].item())
         validation_state["loss_ce"].append(losses[1].item())
@@ -129,13 +125,9 @@ class PatchDAFWrapper:
         loss_ori = np.mean(validation_state["loss_ori"])
         loss_fusion = np.mean(validation_state["loss_image"])
 
-        self.log_loss(
-            "Validation", epoch, writer, loss, loss_ce, loss_infonce, loss_ori
-        )
+        self.log_loss("Validation", epoch, writer, loss, loss_ce, loss_infonce, loss_ori)
 
-        writer.add_scalar(
-            "Validation/mean_distance", np.mean(validation_state["distance"]), epoch
-        )
+        writer.add_scalar("Validation/mean_distance", np.mean(validation_state["distance"]), epoch)
         writer.add_scalar(
             "Validation/median_distance", np.median(validation_state["distance"]), epoch
         )
@@ -178,9 +170,7 @@ class PatchDAFWrapper:
         for batch_idx in range(gt.shape[0]):
             loc_pred = get_location(heatmap[batch_idx, :, :, :])
             loc_gt = get_location(gt[batch_idx, :, :, :])
-            meter_distance = get_meter_distance(
-                loc_gt, loc_pred, city[batch_idx], batch_idx
-            )
+            meter_distance = get_meter_distance(loc_gt, loc_pred, city[batch_idx], batch_idx)
             distances.append(meter_distance)
 
             orientation_distance = get_orientation_distance(
@@ -228,9 +218,7 @@ class PatchDAFWrapper:
 
         return loss, loss_ce, loss_infonce, loss_ori
 
-    def log_loss(
-        self, stage_name, global_step, writer, loss, loss_ce, loss_infonce, loss_ori
-    ):
+    def log_loss(self, stage_name, global_step, writer, loss, loss_ce, loss_infonce, loss_ori):
         writer.add_scalar(f"{stage_name}/loss_ce", loss_ce, global_step)
         writer.add_scalar(f"{stage_name}/loss_infonce", loss_infonce, global_step)
         writer.add_scalar(f"{stage_name}/loss_ori", loss_ori, global_step)
@@ -263,9 +251,7 @@ class PatchDAFWrapper:
         for batch_idx in range(len(city)):
             loc_pred = get_location(heatmap[batch_idx, :, :, :])
             loc_gt = get_location(gt[batch_idx, :, :, :])
-            meter_distance = get_meter_distance(
-                loc_gt, loc_pred, city[batch_idx], batch_idx
-            )
+            meter_distance = get_meter_distance(loc_gt, loc_pred, city[batch_idx], batch_idx)
             distance.append(meter_distance)
 
             orientation_distance = get_orientation_distance(

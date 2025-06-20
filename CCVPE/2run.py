@@ -4,26 +4,36 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, Subset
 from dual_datasets import VIGORDataset
-from utils import process_data, get_data_transforms
+from utils import process_data_augment, process_data, get_data_transforms
 from registry import get_registry
 from test import load_model, run_test_dataset, save_distances
 import wandb
+import random
 
 
 def main():
     weight_ori = 1e1
     weight_infoNCE = 1e4
-    experiment_name = "score_fine_soft_patch_DAF"
-    wandb.init(project="VITA", name=experiment_name)
+    use_augment = False
+    ori_noise = 180
+    experiment_name = "score_matching_fusion_rerun"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_wrapper = get_registry(experiment_name)(
         experiment_name, device, weight_infoNCE, weight_ori
     )
+    if use_augment:
+        experiment_name += "_use-augment"
+    else:
+        experiment_name += "_no-augment"
+
+    if ori_noise == 0:
+        experiment_name += "_known-orientation"
+    wandb.init(project="VITA", name=experiment_name)
     check_experiment_name(experiment_name)
 
     dataset_root = "/work/vita/qngo/VIGOR"
     learning_rate = 1e-4
-    batch_size = 7
+    batch_size = 8
     num_epoch = 14
     area = "samearea"
     training = True
@@ -35,6 +45,7 @@ def main():
         split=area,
         train=training,
         pos_only=pos_only,
+        ori_noise=ori_noise,
         transform=(transform_grd, transform_sat),
         use_osm_tiles=True,
     )
@@ -51,6 +62,13 @@ def main():
     train_dataloader, val_dataloader = get_dataloaders(
         vigor, batch_size, debug_mode=(debug := False)
     )
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=learning_rate,
+        pct_start=0.05,
+        steps_per_epoch=len(train_dataloader),
+        epochs=num_epoch,
+    )
 
     if debug:
         num_epoch *= 100
@@ -59,10 +77,12 @@ def main():
         train_dataloader,
         val_dataloader,
         optimizer,
+        scheduler,
         model_wrapper,
         writer,
         device,
         experiment_name,
+        use_augment,
         debug,
     )
 
@@ -118,10 +138,12 @@ def train(
     train_dataloader,
     val_dataloader,
     optimizer,
+    scheduler,
     model_wrapper,
     tb_writer,
     device,
     experiment_name,
+    use_augment,
     debug,
 ):
     global_step = 0
@@ -131,7 +153,14 @@ def train(
     best_epoch = -1
     for epoch in range(num_epoch):
         global_step = train_step(
-            train_dataloader, optimizer, model_wrapper, device, global_step, tb_writer
+            train_dataloader,
+            optimizer,
+            scheduler,
+            model_wrapper,
+            device,
+            global_step,
+            tb_writer,
+            use_augment,
         )
         mean_distance = validation_step(val_dataloader, model_wrapper, device, epoch, tb_writer)
         if not debug and mean_distance < best_distance:
@@ -142,17 +171,35 @@ def train(
     return best_epoch
 
 
-def train_step(train_dataloader, optimizer, model_wrapper, device, global_step, tb_writer):
+def train_step(
+    train_dataloader,
+    optimizer,
+    scheduler,
+    model_wrapper,
+    device,
+    global_step,
+    tb_writer,
+    use_augment,
+):
     steps = global_step
     model_wrapper.set_model_to_train()
     for i, data in enumerate(train_dataloader, 0):
         optimizer.zero_grad()
-        processed_data = process_data(data, device)
+        if use_augment:
+            augment_list = ["none", "missing_OSM", "missing_SAT", "noisy_OSM", "noisy_SAT"]
+            augment = random.choices(
+                population=augment_list, weights=[0.4, 0.15, 0.15, 0.15, 0.15], k=1
+            )[0]
+        else:
+            augment = "none"
+        processed_data = process_data_augment(data, device, augment)
         loss = model_wrapper.train_step(processed_data, steps, tb_writer)
         loss.backward()
         optimizer.step()
+        scheduler.step()
         steps += 1
         wandb.log({"train/loss": loss})
+        wandb.log({"train/lr": scheduler.get_last_lr()})
     return steps
 
 
