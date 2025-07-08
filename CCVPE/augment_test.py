@@ -15,18 +15,17 @@ base_path = "/work/vita/qngo/test_results"
 
 
 def main():
-    # experiment_names = [('hard_select_fusion', 6), ('sat_hard_select_fusion', 7), ('random_score_matching_fusion_rerun', 10), ('score_matching_fusion_rerun', 7)]
     experiment_names = [
-        ("soft_select_fusion_v2", 3, "missing_OSM"),
-        ("soft_select_fusion_v2", 3, "missing_SAT"),
-        ("soft_select_fusion_v2", 3, "noisy_OSM"),
-        ("soft_select_fusion_v2", 3, "noisy_SAT"),
+        ("soft_patch_DAF_v3_push_perf", 8),
+        ("score_matching_fusion_rerun", 12),
+        ("soft_select_fusion_v3", 7),
     ]
 
     dataset_root = "/work/vita/qngo/VIGOR"
-    batch_size = 32
+    batch_size = 64
     fov = 360
-    ori_noise = 18 * (180 // 18)
+    ori_noise = 180
+    use_augment = True  # a little bit missleading, if the model was trained with augmentation then True, it is not about using augment during test
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     circular_padding = True  # apply circular padding along the horizontal direction in the ground feature extractor
     area = "samearea"
@@ -41,33 +40,64 @@ def main():
         pos_only=pos_only,
         transform=(transform_grd, transform_sat),
         use_osm_tiles=True,
+        ori_noise=ori_noise,
     )
 
-    for experiment_name, epoch, augment_type in experiment_names:
-        print(f"model name {experiment_name}")
-        print("at epoch ", epoch)
-        if not os.path.exists(os.path.join(base_path, experiment_name)):
-            os.mkdir(os.path.join(base_path, experiment_name))
+    augments = ["missing_OSM", "missing_SAT", "noisy_OSM", "noisy_SAT"]
 
-        writer = SummaryWriter(log_dir=os.path.join("runs", f"{experiment_name}_{augment_type}"))
-        model_wrapper = get_registry(experiment_name)(experiment_name, device)
+    for augment_type in augments:
+        for experiment_name, epoch in experiment_names:
+            mean_distances = []
+            median_distances = []
+            for i in range(1):
+                print(f"model name {experiment_name}")
+                print("at epoch ", epoch)
+                if not os.path.exists(os.path.join(base_path, experiment_name)):
+                    os.mkdir(os.path.join(base_path, experiment_name))
 
-        base_model_path = "/work/vita/qngo/models/VIGOR/"
-        load_model(model_wrapper, base_model_path, experiment_name, epoch=epoch)
-        distances = run_test_dataset(
-            experiment_name,
-            dataset=vigor,
-            model_wrapper=model_wrapper,
-            batch_size=batch_size,
-            device=device,
-            base_path=base_path,
-            augment_type=augment_type,
-            debug=(debug := False),
-        )
+                current_experiment_name = experiment_name
+                model_wrapper = get_registry(current_experiment_name)(
+                    current_experiment_name, device
+                )
+                if use_augment:
+                    current_experiment_name += "_use-augment"
+                else:
+                    current_experiment_name += "_no-augment"
 
-        save_distances(experiment_name, distances, base_path)
-        writer.add_scalar("Test/mean_distance", np.mean(distances), 0)
-        writer.add_scalar("Test/median_distance", np.median(distances), 0)
+                if ori_noise == 0:
+                    current_experiment_name += "_known-orientation"
+
+                base_model_path = "/work/vita/qngo/models/VIGOR/"
+                load_model(model_wrapper, base_model_path, current_experiment_name, epoch=epoch)
+                writer_experiment_name = f"{current_experiment_name}_{augment_type}"
+
+                debug = False
+                if debug:
+                    writer_experiment_name += "_debug"
+                writer = SummaryWriter(
+                    log_dir=os.path.join("runs", f"{check_experiment_name(writer_experiment_name)}")
+                )
+                distances = run_test_dataset(
+                    current_experiment_name,
+                    dataset=vigor,
+                    model_wrapper=model_wrapper,
+                    batch_size=batch_size,
+                    device=device,
+                    base_path=base_path,
+                    debug=debug,
+                    augment_type=augment_type,
+                )
+
+                # save_distances(experiment_name, distances, base_path)
+                writer.add_scalar(f"Test/mean_distance_{i}", np.mean(distances), 0)
+                writer.add_scalar(f"Test/median_distance_{i}", np.median(distances), 0)
+                mean_distances.append(np.mean(distances))
+                median_distances.append(np.median(distances))
+
+            writer.add_scalar(f"Test/mean_distance_mean", np.mean(mean_distances), 0)
+            writer.add_scalar(f"Test/mean_distance_std", np.std(mean_distances), 0)
+            writer.add_scalar(f"Test/median_distance_mean", np.mean(median_distances), 0)
+            writer.add_scalar(f"Test/median_distance_str", np.std(median_distances), 0)
 
 
 def run_test_dataset(
@@ -77,8 +107,8 @@ def run_test_dataset(
     batch_size,
     device,
     base_path,
-    augment_type,
     debug=False,
+    augment_type="none",
 ):
     """
     This method became very complicated because I tried to save the heatmaps but the GPU could not allocated
@@ -94,15 +124,10 @@ def run_test_dataset(
     test_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     print("len dataset ", len(dataset))
     print("data loader len ", len(test_dataloader))
-    limit_heatmaps_size = 200
-
-    np_heatmaps = np.zeros((len(dataset), 512, 512))
 
     with torch.no_grad():
         distance_in_meters = []
 
-        heatmaps = torch.zeros(limit_heatmaps_size * batch_size, 1, 512, 512, device=device)
-        items_in_h = 0
         for i, data in enumerate(tqdm(test_dataloader), 0):
             processed_data = process_data_augment(data, device, augment_type)
             _, loss, heatmap = model_wrapper.infer(processed_data)
@@ -111,32 +136,6 @@ def run_test_dataset(
             # offload from gpu
             distances_cpu = distances.cpu().detach().tolist()
             distance_in_meters.extend(distances_cpu)
-
-            current_batch_size = heatmap.shape[0]
-
-            heatmaps[items_in_h * batch_size : items_in_h * batch_size + current_batch_size] = (
-                heatmap
-            )
-            items_in_h += 1
-
-            if items_in_h >= limit_heatmaps_size:
-                cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
-                # 0, 96 (32*3), 96, 96*2
-                np_heatmaps[
-                    batch_size * (i + 1 - limit_heatmaps_size) : batch_size * i + current_batch_size
-                ] = cpu_heatmaps
-                items_in_h = 0
-                # heatmaps = torch.zeros(limit_heatmaps_size*batch_size, 1, 512, 512, device=device)
-
-        # handle last remaining items
-        if items_in_h > 0:
-            cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
-            np_heatmaps[-((items_in_h - 1) * batch_size + current_batch_size) :] = cpu_heatmaps[
-                : (items_in_h - 1) * batch_size + current_batch_size
-            ]
-
-        heatmaps = np_heatmaps
-        # save_heatmap(experiment_name, heatmaps, len(dataset), base_path)
 
     return distance_in_meters
 
@@ -204,10 +203,26 @@ def compute_distances(data, heatmap):
     return meter_distances
 
 
-def load_model(model_wrapper, base_model_path: str, model_name: str, epoch: int):
+def load_model(model_wrapper, base_model_path: str, model_name: str, epoch: int | str):
     epoch = str(epoch)
     model_path = os.path.join(base_model_path, model_name, epoch, "model.pt")
     model_wrapper.load_model(model_path)
+
+
+def check_experiment_name(experiment_name: str):
+    """
+    When not careful, using the same experiment name will overwrite tensorboard runs.
+    Additionnaly, with bad practice, we lose track of debug runs
+
+    We adopt the following policy:
+        if a name has 'debug' in it, it can collide with other experiment. This way it is also
+        easier to just rm *_debug to clean up our runs
+
+        if the name does not contain 'debug' and collides then we crash the run
+    """
+    if os.path.exists(os.path.join("runs", experiment_name)) and "debug" not in experiment_name:
+        raise Exception(f"name already taken {experiment_name}")
+    return experiment_name
 
 
 if __name__ == "__main__":

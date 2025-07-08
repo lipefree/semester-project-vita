@@ -17,7 +17,7 @@ from multiprocessing import Pool, cpu_count
 
 # only works for KITTI dataset
 root = "/work/vita/qngo/KITTI"  # cluster test
-KITTI_TILE_SIZE = 128.4  # m
+KITTI_TILE_SIZE = 250.6604 / 2  # m
 
 
 def prepare_osm_data(dataset_root: str, test_mode: bool = False) -> None:
@@ -58,7 +58,7 @@ def download_tiles(dataset_root: str, test_mode: bool = False) -> None:
 
     TODO: host the files somewhere instead
     """
-    for file in split_list():
+    for file in split_list()[1:]:
         download_per_file(dataset_root, file)
 
 
@@ -88,7 +88,6 @@ def test_download_per_date(dataset_root: str, date: str) -> None:
 
 def _download_one_tile(args):
     dataset_root, name, latlong = args
-    # fetch the tile
     tile = get_osm_raster(latlong)
 
     # reconstruct output path
@@ -98,20 +97,20 @@ def _download_one_tile(args):
     out_dir = os.path.join(dataset_root, "osm_tiles", middle_path[0], middle_path[1])
     out_path = os.path.join(out_dir, file_name)
 
-    # write it out
     with open(out_path, "wb") as f:
         np.save(f, tile)
 
-    return name  # or return out_path if you want to track where it went
+    return name
 
 
 def download_per_file(dataset_root: str, file: str) -> None:
     latlong_list = list_latlong(dataset_root, file)
     args = [(dataset_root, name, ll) for name, ll in latlong_list]
 
-    # spawn a pool with as many processes as you have cores
     print("cpu count ", cpu_count())
-    with Pool(processes=min(cpu_count(), 5)) as pool:
+    with Pool(
+        processes=min(cpu_count(), 3)
+    ) as pool:  # unfortunatly, we will DDOS the overpass instance with more parallelization
         # imap_unordered gives you results as they come back
         for _ in tqdm(
             pool.imap_unordered(_download_one_tile, args),
@@ -128,7 +127,7 @@ def get_osm_raster(latlong: tuple[float, float]) -> np.ndarray:
         prior_latlon=latlong,
         tile_size_meters=KITTI_TILE_SIZE,
     )
-    ppm = 640 / KITTI_TILE_SIZE / 2  # To get 640x640 pixels at the end
+    ppm = 1280 / KITTI_TILE_SIZE / 2  # To get 1280x1280 pixels at the end
     tiler = TileManager.from_bbox(proj, bbox, ppm)  # type: ignore
     canvas = tiler.query(bbox)
 

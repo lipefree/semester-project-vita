@@ -15,8 +15,8 @@ def main():
     weight_ori = 1e1
     weight_infoNCE = 1e4
     use_augment = False
-    ori_noise = 0
-    experiment_name = "soft_patch_DAF_v3_debug"
+    ori_noise = 180
+    experiment_name = "CCVPE_sat_cosine_decay"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_wrapper = get_registry(experiment_name)(
         experiment_name, device, weight_infoNCE, weight_ori
@@ -60,7 +60,7 @@ def main():
     writer = SummaryWriter(log_dir=os.path.join("runs", experiment_name))
 
     train_dataloader, val_dataloader = get_dataloaders(
-        vigor, batch_size, debug_mode=(debug := True)
+        vigor, batch_size, debug_mode=(debug := False)
     )
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,

@@ -22,6 +22,9 @@ from wrappers.convnextFineScorePatchDAFWrapper import ConvNextFineScorePatchDAFW
 from wrappers.scoreFineSoftSelectWrapper import ScoreFinePatchDAFWrapper
 from wrappers.patchDAFV3Wrapper import PatchDAFV3Wrapper
 from wrappers.softSelectV3Wrapper import SoftSelectV3Wrapper
+from wrappers.satScoreMatchWrapper import SatScoreMatchWrapper
+from wrappers.osmScoreMatchWrapper import OsmScoreMatchWrapper
+from wrappers.HCNetWrapper import HCNetWrapper
 from functools import partial
 
 """
@@ -190,6 +193,27 @@ registry = {
     "soft_select_fusion_v3_debug": partial(
         SoftSelectV3Wrapper
     ),  # select at a patch level but soft, but with rescale
+    "soft_patch_DAF_v3_push_perf": partial(PatchDAFV3Wrapper),
+    "soft_patch_DAF_v3_push_perf_debug": partial(PatchDAFV3Wrapper),
+    "sat_true_score_matching_fusion_debug": partial(
+        SatScoreMatchWrapper
+    ),  # real implementation with sat branch only
+    "sat_true_score_matching_fusion": partial(
+        SatScoreMatchWrapper
+    ),  # real implementation with sat branch only
+    "osm_true_score_matching_fusion_debug": partial(
+        OsmScoreMatchWrapper
+    ),  # real implementation with osm branch only
+    "osm_true_score_matching_fusion": partial(
+        OsmScoreMatchWrapper
+    ),  # real implementation with osm branch only
+    "CCVPE_sat_cosine_decay": partial(
+        CCVPEWrapper, use_osm=False
+    ),  # Rerun to test cosine decay impact
+}
+
+hcnet_registry = {
+    "HC-net": partial(HCNetWrapper),
 }
 
 
@@ -198,6 +222,18 @@ def get_registry(experiment_name):
         return registry[experiment_name]
     except KeyError:
         names = "".join([f"{keys} \n" for keys in registry])
+        print(
+            "The experiment name specified does not exist. Add it or pick from :\n",
+            names,
+        )
+        raise KeyError
+
+
+def get_hcnet_registry(experiment_name):
+    try:
+        return hcnet_registry[experiment_name]
+    except KeyError:
+        names = "".join([f"{keys} \n" for keys in hcnet_registry])
         print(
             "The experiment name specified does not exist. Add it or pick from :\n",
             names,

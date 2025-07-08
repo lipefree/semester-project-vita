@@ -42,9 +42,7 @@ class GeoPlotter:
         )
 
     def bbox(self, bbox, color, name=None, **kwargs):
-        corners = np.stack(
-            [bbox.min_, bbox.left_top, bbox.max_, bbox.right_bottom, bbox.min_]
-        )
+        corners = np.stack([bbox.min_, bbox.left_top, bbox.max_, bbox.right_bottom, bbox.min_])
         self.fig.add_trace(
             go.Scattermapbox(
                 lat=corners[:, 0],

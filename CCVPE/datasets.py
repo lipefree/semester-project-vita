@@ -22,6 +22,7 @@ np.random.seed(0)
 # ---------------------------------------------------------------------------------
 # VIGOR
 
+
 class VIGORDataset(Dataset):
     def __init__(
         self,
@@ -70,16 +71,13 @@ class VIGORDataset(Dataset):
 
         idx = 0
         for city in self.city_list:
-
             # load pickle file for given city
             if self.use_osm_tiles:
-                osm_tile_path = os.path.join(
-                    self.root, city, "osm_tiles", "data.npy"
-                )
-                
-                with open(osm_tile_path, 'rb') as f:
+                osm_tile_path = os.path.join(self.root, city, "osm_tiles", "data.npy")
+
+                with open(osm_tile_path, "rb") as f:
                     loaded_data = np.load(f)
-                    
+
                 # with gzip.open(osm_tile_path, "rb") as f:
                 #     loaded_data = pickle.load(f)
 
@@ -87,20 +85,16 @@ class VIGORDataset(Dataset):
                 self.osm_tiles.extend(loaded_data)
                 print(f"osm tiles loaded for {city}")
 
-            sat_list_fname = os.path.join(
-                self.root, label_root, city, "satellite_list.txt"
-            )
+            sat_list_fname = os.path.join(self.root, label_root, city, "satellite_list.txt")
             with open(sat_list_fname, "r") as file:
                 for line in file.readlines():
                     self.sat_list.append(
-                        os.path.join(
-                            self.root, city, "satellite", line.replace("\n", "")
-                        )
+                        os.path.join(self.root, city, "satellite", line.replace("\n", ""))
                     )
                     self.sat_index_dict[line.replace("\n", "")] = idx
                     idx += 1
             print("InputData::__init__: load", sat_list_fname, idx)
-            
+
         self.sat_list = np.array(self.sat_list)
         self.sat_data_size = len(self.sat_list)
         print("Sat loaded, data size:{}".format(self.sat_data_size))
@@ -134,12 +128,8 @@ class VIGORDataset(Dataset):
                     for i in [1, 4, 7, 10]:
                         label.append(self.sat_index_dict[data[i]])
                     label = np.array(label).astype(int)
-                    delta = np.array(
-                        [data[2:4], data[5:7], data[8:10], data[11:13]]
-                    ).astype(float)
-                    self.grd_list.append(
-                        os.path.join(self.root, city, "panorama", data[0])
-                    )
+                    delta = np.array([data[2:4], data[5:7], data[8:10], data[11:13]]).astype(float)
+                    self.grd_list.append(os.path.join(self.root, city, "panorama", data[0]))
                     self.label.append(label)
                     self.delta.append(delta)
                     if not label[0] in self.sat_cover_dict:
@@ -163,9 +153,7 @@ class VIGORDataset(Dataset):
             grd = grd.convert("RGB")
         except:
             print("unreadable image")
-            grd = PIL.Image.new(
-                "RGB", (320, 640)
-            )  # if the image is unreadable, use a blank image
+            grd = PIL.Image.new("RGB", (320, 640))  # if the image is unreadable, use a blank image
         grd = self.grdimage_transform(grd)
 
         # generate a random rotation
@@ -184,9 +172,7 @@ class VIGORDataset(Dataset):
             dims=2,
         )
 
-        orientation_angle = (
-            rotation * 360
-        )  # 0 means heading North, counter-clockwise increasing
+        orientation_angle = rotation * 360  # 0 means heading North, counter-clockwise increasing
 
         # satellite OR osm tiles
 
@@ -194,9 +180,7 @@ class VIGORDataset(Dataset):
             [
                 # resize
                 transforms.Resize([512, 512]),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             ]
         )
 
@@ -205,7 +189,7 @@ class VIGORDataset(Dataset):
             osm_idx = self.label[idx][pos_index]
 
             osm_tile: np.ndarray = self.osm_tiles[osm_idx]
-               
+
             if self.use_rendered_tiles:
                 osm_tile = np.array(Colormap.apply(osm_tile))
                 osm_tile = np.moveaxis(osm_tile, -1, 0)
@@ -227,19 +211,15 @@ class VIGORDataset(Dataset):
             col_offset = np.round(col_offset / width_raw * width)
 
             if self.use_concat:
-                sat  = PIL.Image.open(
-                        os.path.join(self.sat_list[self.label[idx][pos_index]])
-                    )
+                sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
                 sat = sat.convert("RGB")
                 sat = self.satimage_transform(sat)
-                osm_tile = torch.cat((sat, osm_tile), dim=0) # fusion
+                osm_tile = torch.cat((sat, osm_tile), dim=0)  # fusion
 
         else:
             if self.pos_only:  # load positives only
                 pos_index = 0
-                sat = PIL.Image.open(
-                    os.path.join(self.sat_list[self.label[idx][pos_index]])
-                )
+                sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
                 [row_offset, col_offset] = self.delta[
                     idx, pos_index
                 ]  # delta = [delta_lat, delta_lon]
@@ -250,9 +230,7 @@ class VIGORDataset(Dataset):
                     np.abs(col_offset) >= 320 or np.abs(row_offset) >= 320
                 ):  # do not use the semi-positives where GT location is outside the image
                     pos_index = random.randint(0, 3)
-                    sat = PIL.Image.open(
-                        os.path.join(self.sat_list[self.label[idx][pos_index]])
-                    )
+                    sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
                     [row_offset, col_offset] = self.delta[
                         idx, pos_index
                     ]  # delta = [delta_lat, delta_lon]
@@ -278,31 +256,25 @@ class VIGORDataset(Dataset):
         sigma, mu = 4, 0.0
         gt[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2)))
         gt = torch.tensor(gt)
-        gt /= gt.sum() # normalization to make it a distribution
+        gt /= gt.sum()  # normalization to make it a distribution
 
         if self.train:
             # find the ground truth orientation index, we use 20 orientation bins, and each bin is 18 degrees
             index = int(orientation_angle // 18)
             ratio = (orientation_angle % 18) / 18
             if index == 0:
-                gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
+                gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (1 - ratio)
+                gt_with_ori[19, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
+            else:
+                gt_with_ori[20 - index, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
                     1 - ratio
                 )
-                gt_with_ori[19, :, :] = (
-                    np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
-                )
-            else:
-                gt_with_ori[20 - index, :, :] = np.exp(
-                    -((d - mu) ** 2 / (2.0 * sigma**2))
-                ) * (1 - ratio)
                 gt_with_ori[20 - index - 1, :, :] = (
                     np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
                 )
         gt_with_ori = torch.tensor(gt_with_ori)
 
-        orientation = torch.full(
-            [2, height, width], np.cos(orientation_angle * np.pi / 180)
-        )
+        orientation = torch.full([2, height, width], np.cos(orientation_angle * np.pi / 180))
         orientation[1, :, :] = np.sin(orientation_angle * np.pi / 180)
 
         if "NewYork" in self.grd_list[idx]:
@@ -324,16 +296,14 @@ class VIGORDataset(Dataset):
             return grd, sat, gt, gt_with_ori, orientation, city, orientation_angle
 
     def get_item_sat(self, idx):
-        '''
-           Helper function since when we use osm mode or fusion mode, we can't get both 
+        """
+        Helper function since when we use osm mode or fusion mode, we can't get both
 
-           It may change since fusion is supposed to be done in the model 
-        '''
+        It may change since fusion is supposed to be done in the model
+        """
         if self.pos_only:  # load positives only
             pos_index = 0
-            sat = PIL.Image.open(
-                os.path.join(self.sat_list[self.label[idx][pos_index]])
-            )
+            sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
         else:  # load positives and semi-positives
             col_offset = 320
             row_offset = 320
@@ -341,9 +311,7 @@ class VIGORDataset(Dataset):
                 np.abs(col_offset) >= 320 or np.abs(row_offset) >= 320
             ):  # do not use the semi-positives where GT location is outside the image
                 pos_index = random.randint(0, 3)
-                sat = PIL.Image.open(
-                    os.path.join(self.sat_list[self.label[idx][pos_index]])
-                )
+                sat = PIL.Image.open(os.path.join(self.sat_list[self.label[idx][pos_index]]))
                 [row_offset, col_offset] = self.delta[
                     idx, pos_index
                 ]  # delta = [delta_lat, delta_lon]
@@ -355,9 +323,9 @@ class VIGORDataset(Dataset):
         return sat
 
     def get_item_osm(self, idx):
-        '''
-           Same as 'get_item_sat' but for osm 
-        '''
+        """
+        Same as 'get_item_sat' but for osm
+        """
         transform_osm_tile = transforms.Compose(
             [
                 # resize
@@ -388,14 +356,11 @@ class OxfordRobotCarDataset(Dataset):
             self.grdimage_transform = transform[0]
             self.satimage_transform = transform[1]
 
-        self.full_satellite_map = PIL.Image.open(
-            sat_path
-        )  # meters_per_pixel: 0.09240351462361521
+        self.full_satellite_map = PIL.Image.open(sat_path)  # meters_per_pixel: 0.09240351462361521
 
         # Load ground training or validation or test set
         self.grdList = []
         if self.split == "train":
-
             with open(self.grd_image_root + "training.txt", "r") as filehandle:
                 filecontents = filehandle.readlines()
                 for line in filecontents:
@@ -439,9 +404,7 @@ class OxfordRobotCarDataset(Dataset):
             self.test3_len = len(test_2015_02_10_11_58_05)
 
             self.grdList = (
-                test_2015_08_14_14_54_57
-                + test_2015_08_12_15_04_18
-                + test_2015_02_10_11_58_05
+                test_2015_08_14_14_54_57 + test_2015_08_12_15_04_18 + test_2015_02_10_11_58_05
             )
 
             with open(self.grd_image_root + "test_yaw.npy", "rb") as f:
@@ -489,16 +452,13 @@ class OxfordRobotCarDataset(Dataset):
         return self.grdNum
 
     def __getitem__(self, idx):
-
         # ground
         grd = PIL.Image.open(os.path.join(self.grd_image_root, self.grdList[idx][0]))
 
         grd = grd.convert("RGB")
         grd = self.grdimage_transform(grd)
 
-        image_coord = self.transform(
-            np.array([[self.grdUTM[0, idx], self.grdUTM[1, idx]]])
-        )[
+        image_coord = self.transform(np.array([[self.grdUTM[0, idx], self.grdUTM[1, idx]]]))[
             0
         ]  # pixel coords of the ground image. Easting, northing to image col, row
 
@@ -574,22 +534,14 @@ class OxfordRobotCarDataset(Dataset):
         index = int(orientation_angle // 18)
         ratio = (orientation_angle % 18) / 18
         if index == 19:
-            gt_with_ori[19, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
-                1 - ratio
-            )
+            gt_with_ori[19, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (1 - ratio)
             gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
         else:
-            gt_with_ori[index, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
-                1 - ratio
-            )
-            gt_with_ori[index + 1, :, :] = (
-                np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
-            )
+            gt_with_ori[index, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (1 - ratio)
+            gt_with_ori[index + 1, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
         gt_with_ori = torch.tensor(gt_with_ori)
 
-        orientation = torch.full(
-            [2, height, width], np.cos(orientation_angle * np.pi / 180)
-        )
+        orientation = torch.full([2, height, width], np.cos(orientation_angle * np.pi / 180))
         orientation[1, :, :] = np.sin(orientation_angle * np.pi / 180)
 
         return grd, sat, gt, gt_with_ori, orientation, orientation_angle
@@ -602,6 +554,7 @@ Satmap_zoom = 18
 SatMap_original_sidelength = 512
 SatMap_process_sidelength = 512
 satmap_dir = "satmap"
+osmtile_dir = "osm_tiles"
 grdimage_dir = "raw_data"
 oxts_dir = "oxts/data"
 left_color_camera_dir = "image_02/data"
@@ -764,15 +717,11 @@ class SatGrdDataset(Dataset):
         # gt heat map
         x_offset = int(
             gt_shift_x * self.shift_range_pixels_lon * np.cos(random_ori / 180 * np.pi)
-            - gt_shift_y
-            * self.shift_range_pixels_lat
-            * np.sin(random_ori / 180 * np.pi)
+            - gt_shift_y * self.shift_range_pixels_lat * np.sin(random_ori / 180 * np.pi)
         )  # horizontal direction
         y_offset = int(
             -gt_shift_y * self.shift_range_pixels_lat * np.cos(random_ori / 180 * np.pi)
-            - gt_shift_x
-            * self.shift_range_pixels_lon
-            * np.sin(random_ori / 180 * np.pi)
+            - gt_shift_x * self.shift_range_pixels_lon * np.sin(random_ori / 180 * np.pi)
         )  # vertical direction
 
         x, y = np.meshgrid(
@@ -796,22 +745,16 @@ class SatGrdDataset(Dataset):
         index = int(orientation_angle // 22.5)
         ratio = (orientation_angle % 22.5) / 22.5
         if index == 0:
-            gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
-                1 - ratio
-            )
+            gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (1 - ratio)
             gt_with_ori[15, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
         else:
-            gt_with_ori[16 - index, :, :] = np.exp(
-                -((d - mu) ** 2 / (2.0 * sigma**2))
-            ) * (1 - ratio)
-            gt_with_ori[16 - index - 1, :, :] = (
-                np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
+            gt_with_ori[16 - index, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
+                1 - ratio
             )
+            gt_with_ori[16 - index - 1, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
         gt_with_ori = torch.tensor(gt_with_ori)
 
-        orientation_map = torch.full(
-            [2, 512, 512], np.cos(orientation_angle * np.pi / 180)
-        )
+        orientation_map = torch.full([2, 512, 512], np.cos(orientation_angle * np.pi / 180))
         orientation_map[1, :, :] = np.sin(orientation_angle * np.pi / 180)
 
         return (
@@ -869,7 +812,6 @@ class SatGrdDatasetTest(Dataset):
         return self.file_name
 
     def __getitem__(self, idx):
-
         line = self.file_name[idx]
         file_name, gt_shift_x, gt_shift_y, theta = line.split(" ")
         day_dir = file_name[:10]
@@ -932,12 +874,8 @@ class SatGrdDatasetTest(Dataset):
         )
 
         # load the shifts
-        gt_shift_x = -float(
-            gt_shift_x
-        )  # --> right as positive, parallel to the heading direction
-        gt_shift_y = -float(
-            gt_shift_y
-        )  # --> up as positive, vertical to the heading direction
+        gt_shift_x = -float(gt_shift_x)  # --> right as positive, parallel to the heading direction
+        gt_shift_y = -float(gt_shift_y)  # --> up as positive, vertical to the heading direction
 
         sat_rand_shift = sat_align_cam.transform(
             sat_align_cam.size,
@@ -965,15 +903,11 @@ class SatGrdDatasetTest(Dataset):
         # gt heat map
         x_offset = int(
             gt_shift_x * self.shift_range_pixels_lon * np.cos(random_ori / 180 * np.pi)
-            - gt_shift_y
-            * self.shift_range_pixels_lat
-            * np.sin(random_ori / 180 * np.pi)
+            - gt_shift_y * self.shift_range_pixels_lat * np.sin(random_ori / 180 * np.pi)
         )  # horizontal direction
         y_offset = int(
             -gt_shift_y * self.shift_range_pixels_lat * np.cos(random_ori / 180 * np.pi)
-            - gt_shift_x
-            * self.shift_range_pixels_lon
-            * np.sin(random_ori / 180 * np.pi)
+            - gt_shift_x * self.shift_range_pixels_lon * np.sin(random_ori / 180 * np.pi)
         )  # vertical direction
 
         x, y = np.meshgrid(
@@ -997,22 +931,16 @@ class SatGrdDatasetTest(Dataset):
         index = int(orientation_angle // 22.5)
         ratio = (orientation_angle % 22.5) / 22.5
         if index == 0:
-            gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
-                1 - ratio
-            )
+            gt_with_ori[0, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (1 - ratio)
             gt_with_ori[15, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
         else:
-            gt_with_ori[16 - index, :, :] = np.exp(
-                -((d - mu) ** 2 / (2.0 * sigma**2))
-            ) * (1 - ratio)
-            gt_with_ori[16 - index - 1, :, :] = (
-                np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
+            gt_with_ori[16 - index, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * (
+                1 - ratio
             )
+            gt_with_ori[16 - index - 1, :, :] = np.exp(-((d - mu) ** 2 / (2.0 * sigma**2))) * ratio
         gt_with_ori = torch.tensor(gt_with_ori)
 
-        orientation_map = torch.full(
-            [2, 512, 512], np.cos(orientation_angle * np.pi / 180)
-        )
+        orientation_map = torch.full([2, 512, 512], np.cos(orientation_angle * np.pi / 180))
         orientation_map[1, :, :] = np.sin(orientation_angle * np.pi / 180)
 
         return (

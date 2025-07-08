@@ -16,16 +16,15 @@ base_path = "/work/vita/qngo/test_results"
 
 
 def main():
-    # experiment_names = [('hard_select_fusion', 6), ('sat_hard_select_fusion', 7), ('random_score_matching_fusion_rerun', 10), ('score_matching_fusion_rerun', 7)]
     experiment_names = [
-        ("soft_patch_DAF_v3", 8),
+        ("soft_patch_DAF_v3_push_perf", 8),
     ]
 
     dataset_root = "/work/vita/qngo/VIGOR"
     batch_size = 64
     fov = 360
     ori_noise = 0
-    use_augment = True
+    use_augment = True  # a little bit missleading, if the model was trained with augmentation then True, it is not about using augment during test
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     circular_padding = True  # apply circular padding along the horizontal direction in the ground feature extractor
     area = "samearea"
@@ -94,15 +93,10 @@ def run_test_dataset(
     test_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     print("len dataset ", len(dataset))
     print("data loader len ", len(test_dataloader))
-    limit_heatmaps_size = 200
-
-    # np_heatmaps = np.zeros((len(dataset), 512, 512))
 
     with torch.no_grad():
         distance_in_meters = []
 
-        # heatmaps = torch.zeros(limit_heatmaps_size * batch_size, 1, 512, 512, device=device)
-        items_in_h = 0
         for i, data in enumerate(tqdm(test_dataloader), 0):
             processed_data = process_data(data, device)
             _, loss, heatmap = model_wrapper.infer(processed_data)
@@ -111,32 +105,6 @@ def run_test_dataset(
             # offload from gpu
             distances_cpu = distances.cpu().detach().tolist()
             distance_in_meters.extend(distances_cpu)
-
-            current_batch_size = heatmap.shape[0]
-
-            # heatmaps[items_in_h * batch_size : items_in_h * batch_size + current_batch_size] = (
-            #     heatmap
-            # )
-            # items_in_h += 1
-
-            # if items_in_h >= limit_heatmaps_size:
-            #     cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
-            #     # 0, 96 (32*3), 96, 96*2
-            #     np_heatmaps[
-            #         batch_size * (i + 1 - limit_heatmaps_size) : batch_size * i + current_batch_size
-            #     ] = cpu_heatmaps
-            #     items_in_h = 0
-            #     # heatmaps = torch.zeros(limit_heatmaps_size*batch_size, 1, 512, 512, device=device)
-
-        # handle last remaining items
-        # if items_in_h > 0:
-        #     cpu_heatmaps = heatmaps.squeeze(1).cpu().detach().numpy()
-        #     np_heatmaps[-((items_in_h - 1) * batch_size + current_batch_size) :] = cpu_heatmaps[
-        #         : (items_in_h - 1) * batch_size + current_batch_size
-        #     ]
-
-        # heatmaps = np_heatmaps
-        # save_heatmap(experiment_name, heatmaps, len(dataset), base_path)
 
     return distance_in_meters
 

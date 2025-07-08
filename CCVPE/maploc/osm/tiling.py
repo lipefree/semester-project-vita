@@ -113,10 +113,8 @@ class TileManager:
         bbox_tiles = {}
         for i, xmin in enumerate(bounds_x[:-1]):
             for j, ymin in enumerate(bounds_y[:-1]):
-                bbox_tiles[i, j] = BoundaryBox(
-                    [xmin, ymin], [bounds_x[i + 1], bounds_y[j + 1]]
-                )
-    
+                bbox_tiles[i, j] = BoundaryBox([xmin, ymin], [bounds_x[i + 1], bounds_y[j + 1]])
+
         tiles = {}
         for ij, bbox_tile in bbox_tiles.items():
             canvas = Canvas(bbox_tile, ppm)
@@ -143,9 +141,7 @@ class TileManager:
                 bbox_select = tile.bbox & bbox
                 slice_query = bbox_to_slice(bbox_select, canvas)
                 slice_tile = bbox_to_slice(bbox_select, tile)
-                raster[(slice(None),) + slice_query] = tile.raster[
-                    (slice(None),) + slice_tile
-                ]
+                raster[(slice(None),) + slice_query] = tile.raster[(slice(None),) + slice_tile]
         canvas.raster = raster
         return canvas
 

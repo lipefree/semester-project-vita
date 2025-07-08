@@ -510,7 +510,6 @@ class CrossAttention(nn.Module):
         self.H = H
         self.W = W
         self.embed_dim = embed_dim
-        self.norm = nn.LayerNorm(self.embed_dim)
 
     def forward(self, query, value):
         query += self.pe(query)
@@ -525,7 +524,6 @@ class CrossAttention(nn.Module):
             spatial_shapes=self.spatial_shape,
             level_start_index=self.level_start_index,
         )
-        output = self.norm(output)
         output = output.permute(0, 2, 1).view(query.shape[0], self.embed_dim, self.H, self.W)
         return output + query
 
@@ -537,8 +535,12 @@ class PatchRouter(nn.Module):
         self.patch_size = patch_size
         self.hard = hard
         self.embed_dim = embed_dim
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
 
     def forward(self, p1: torch.Tensor, p2: torch.Tensor, temp=0.1):
+        p1 = self.norm1(p1.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        p2 = self.norm2(p2.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
         B, C, H, W = p1.shape
         ph = pw = self.patch_size
         # --- einop patchify ---
@@ -551,7 +553,7 @@ class PatchRouter(nn.Module):
         x = 0.5 * (p1 + p2)  # [B,N,D]
         logits = self.logit(x)  # [B,N,2]
         # We rescale in the same fashion as in attention, or we will get mostly 0 and 1
-        scale = self.embed_dim**0.5
+        scale = D**0.5
 
         # 2) gumbel‐softmax into weights
         weights = F.softmax((logits / scale).flatten(0, 1), dim=-1).view(B, N, 2)  # [B,N,2]
