@@ -9,17 +9,21 @@ from PIL import Image
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 import torchvision.transforms.functional as TF
-import math
-
-import gzip
-import pickle
 from torchvision import transforms
 from osm_tiles_helper import project_to_n
 from maploc.osm.viz import Colormap
 import torchvision.transforms.v2 as transforms
+from enum import Enum
 
 torch.manual_seed(17)
 np.random.seed(0)
+
+
+# Represent the current dataset used for training
+class DatasetType(Enum):
+    VIGOR = (1,)
+    KITTI = (2,)
+
 
 # ---------------------------------------------------------------------------------
 # VIGOR
@@ -400,8 +404,8 @@ class KITTIDataset(Dataset):
 
         self.skip_in_seq = 2  # skip 2 in sequence: 6,3,1~
         if transform != None:
-            self.satmap_transform = transform[0]
-            self.grdimage_transform = transform[1]
+            self.grdimage_transform = transform[0]
+            self.satmap_transform = transform[1]
 
         self.pro_grdimage_dir = "raw_data"
 
@@ -431,8 +435,8 @@ class KITTIDataset(Dataset):
         SatMap_name = os.path.join(self.root, self.satmap_dir, file_name)
         with PIL.Image.open(SatMap_name, "r") as SatMap:
             sat_map = SatMap.convert("RGB")
-            print("image size ", sat_map.size)
 
+        # =================== read OSM tiles ========================================
         osm_tile_name = os.path.join(self.root, self.osmtile_dir, file_name.replace("png", "npy"))
         osm_tile_arr = np.load(osm_tile_name)
         map_viz = Colormap.apply(osm_tile_arr)
@@ -555,6 +559,7 @@ class KITTIDataset(Dataset):
         # transform
         if self.satmap_transform is not None:
             sat_map = self.satmap_transform(sat_map)
+            osm_map = self.satmap_transform(osm_map)
 
         # gt heat map
         x_offset = int(

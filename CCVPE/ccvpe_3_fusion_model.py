@@ -49,7 +49,9 @@ def double_conv(in_channels, out_channels):
 
 
 class CVM_VIGOR(nn.Module):
-    def __init__(self, device, circular_padding, use_adapt, use_concat, use_mlp=False, alpha_type=0):
+    def __init__(
+        self, device, circular_padding, use_adapt, use_concat, use_mlp=False, alpha_type=0
+    ):
         super(CVM_VIGOR, self).__init__()
         self.device = device
         self.circular_padding = circular_padding
@@ -57,13 +59,9 @@ class CVM_VIGOR(nn.Module):
         self.use_concat = use_concat  # If using simple fusion with concat
         self.use_mlp = use_mlp
 
-        self.sat_efficientnet = EfficientNet.from_pretrained(
-            "efficientnet-b0", circular=False
-        )
+        self.sat_efficientnet = EfficientNet.from_pretrained("efficientnet-b0", circular=False)
 
-        self.osm_efficientnet = EfficientNet.from_pretrained(
-            "efficientnet-b0", circular=False
-        )
+        self.osm_efficientnet = EfficientNet.from_pretrained("efficientnet-b0", circular=False)
 
         self.deformable_fusion = deformable_fusion(self.device, alpha_type)
         self.heatmap_norm = nn.LayerNorm(normalized_shape=(512, 512))
@@ -74,11 +72,11 @@ class CVM_VIGOR(nn.Module):
         self.ccvpe_sat = CCVPEDecoder(self.device)
 
         self.ground_encoder = GroundEncoder()
-        self.cross_da1 = deformable_cross_attention(self.device, query_dim=128, alpha_type=alpha_type)
-
+        self.cross_da1 = deformable_cross_attention(
+            self.device, query_dim=128, alpha_type=alpha_type
+        )
 
     def forward(self, grd, sat, osm, heatmap=None, timestep=0):
-
         heatmap += timestep
         heatmap = self.heatmap_norm(heatmap)
         if heatmap is not None:
@@ -87,9 +85,7 @@ class CVM_VIGOR(nn.Module):
 
         grd_descriptors, grd_descriptor_maps = self.ground_encoder(grd)
 
-        sat_feature_volume, multiscale_sat = (
-            self.sat_efficientnet.extract_features_multiscale(sat)
-        )
+        sat_feature_volume, multiscale_sat = self.sat_efficientnet.extract_features_multiscale(sat)
         sat_feature_block0 = multiscale_sat[0]  # [16, 256, 256]
         sat_feature_block2 = multiscale_sat[2]  # [24, 128, 128]
         sat_feature_block4 = multiscale_sat[4]  # [40, 64, 64]
@@ -102,12 +98,10 @@ class CVM_VIGOR(nn.Module):
             multiscale_sat[4],
             multiscale_sat[10],
             # multiscale_sat[15],
-            sat_feature_volume
+            sat_feature_volume,
         ]
 
-        osm_feature_volume, multiscale_osm = (
-            self.osm_efficientnet.extract_features_multiscale(osm)
-        )
+        osm_feature_volume, multiscale_osm = self.osm_efficientnet.extract_features_multiscale(osm)
 
         osm_feature_block0 = multiscale_osm[0]  # [16, 256, 256]
         osm_feature_block2 = multiscale_osm[2]  # [24, 128, 128]
@@ -121,7 +115,7 @@ class CVM_VIGOR(nn.Module):
             multiscale_osm[4],
             multiscale_osm[10],
             # multiscale_osm[15],
-            osm_feature_volume
+            osm_feature_volume,
         ]
 
         batch_size = sat.size(0)  # Get batch size dynamically
@@ -146,10 +140,10 @@ class CVM_VIGOR(nn.Module):
             osm_feature_block15,
             osm_feature_volume,
             fused_image,
-            alpha
-        ) = self.deformable_fusion(sat_features, osm_features, 
-                                   osm_feature_block0, sat_feature_block0, 
-                                   batch_size, heatmap)
+            alpha,
+        ) = self.deformable_fusion(
+            sat_features, osm_features, osm_feature_block0, sat_feature_block0, batch_size, heatmap
+        )
 
         fuse_feature_blocks = [
             fuse_feature_block15,
@@ -176,14 +170,20 @@ class CVM_VIGOR(nn.Module):
             None,
         ]  # None is an edge case, in the last step we don't concat
 
-        ccvpe_output = self.ccvpe(grd_descriptor_maps, grd_descriptors, fuse_feature_blocks, fuse_feature_volume)
-        ccvpe_output_sat = self.ccvpe_sat(grd_descriptor_maps, grd_descriptors, sat_feature_blocks, sat_feature_volume)
-        ccvpe_output_osm = self.ccvpe_osm(grd_descriptor_maps, grd_descriptors, osm_feature_blocks, osm_feature_volume)
+        ccvpe_output = self.ccvpe(
+            grd_descriptor_maps, grd_descriptors, fuse_feature_blocks, fuse_feature_volume
+        )
+        ccvpe_output_sat = self.ccvpe_sat(
+            grd_descriptor_maps, grd_descriptors, sat_feature_blocks, sat_feature_volume
+        )
+        ccvpe_output_osm = self.ccvpe_osm(
+            grd_descriptor_maps, grd_descriptors, osm_feature_blocks, osm_feature_volume
+        )
 
         return alpha, fused_image, ccvpe_output, ccvpe_output_sat, ccvpe_output_osm
 
-class deformable_fusion(nn.Module):
 
+class deformable_fusion(nn.Module):
     def __init__(self, device, d_model=128, query_dim=128, use_pyramid=True, alpha_type=0):
         super().__init__()
 
@@ -194,41 +194,49 @@ class deformable_fusion(nn.Module):
         self.use_pyramid = use_pyramid
         self.learnable_Q = nn.Embedding(self.num_query, self.embed_dims)
 
-        self.pe_layer = PositionEmbeddingLearned(
-            self.device, self.query_dim, self.embed_dims
-        )
+        self.pe_layer = PositionEmbeddingLearned(self.device, self.query_dim, self.embed_dims)
 
-        self.cross_da1 = deformable_cross_attention(self.device, query_dim=128, alpha_type=alpha_type)
+        self.cross_da1 = deformable_cross_attention(
+            self.device, query_dim=128, alpha_type=alpha_type
+        )
 
         self.pyramid1 = PyramidMs(embed_dims=self.embed_dims, query_dim=self.query_dim)
         self.output_decoder = output_decoder()
         self.output_decoder_osm = output_decoder()
         self.output_decoder_sat = output_decoder()
         self.match_input = nn.Sequential(
-                                      nn.Upsample(size=(256,256), mode='bilinear'),
-                                      nn.Conv2d(in_channels=self.embed_dims, out_channels=16, kernel_size=1),
-                                  )
+            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Conv2d(in_channels=self.embed_dims, out_channels=16, kernel_size=1),
+        )
 
         # self.pull_and_select = nn.Conv2d(in_channels=16*3, out_channels=16, kernel_size=1)
 
         self.to_image = nn.Sequential(
-            nn.Upsample(size=(512, 512), mode='bilinear'),
-            nn.Conv2d(in_channels=16, out_channels=3, kernel_size=1)
+            nn.Upsample(size=(512, 512), mode="bilinear"),
+            nn.Conv2d(in_channels=16, out_channels=3, kernel_size=1),
         )
         self.to_osm = nn.Sequential(
             nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1),
-            nn.Upsample(size=(512, 512), mode='bilinear'),
-            nn.Conv2d(in_channels=16, out_channels=3, kernel_size=1)
+            nn.Upsample(size=(512, 512), mode="bilinear"),
+            nn.Conv2d(in_channels=16, out_channels=3, kernel_size=1),
         )
         self.to_sat = nn.Sequential(
             nn.Conv2d(16, 16, kernel_size=3, stride=1, padding=1),
-            nn.Upsample(size=(512, 512), mode='bilinear'),
-            nn.Conv2d(in_channels=16, out_channels=3, kernel_size=1)
+            nn.Upsample(size=(512, 512), mode="bilinear"),
+            nn.Conv2d(in_channels=16, out_channels=3, kernel_size=1),
         )
 
     def forward(
-        self, osm_features, sat_features, osm_0, sat_0, batch_size, grd=None, alpha_hint=None,
-        osm_sat_separated=False, heatmap=None
+        self,
+        osm_features,
+        sat_features,
+        osm_0,
+        sat_0,
+        batch_size,
+        grd=None,
+        alpha_hint=None,
+        osm_sat_separated=False,
+        heatmap=None,
     ):
         pos = self.pe_layer(batch_size)
         pos = pos.view(batch_size, self.num_query, self.embed_dims)
@@ -256,17 +264,16 @@ class deformable_fusion(nn.Module):
         # fused_output = self.match_input(fused_output) + (1 - alpha)*osm_0 + alpha*sat_0
         fused_output = self.match_input(fused_output)
 
-        return (*self.output_decoder(p128, p64, p32, p16),
+        return (
+            *self.output_decoder(p128, p64, p32, p16),
             *self.output(sat_output, self.output_decoder_sat),
             *self.output(osm_output, self.output_decoder_osm),
-            self.to_image(fused_output + osm_0 + sat_0), 
-            alpha)
+            self.to_image(fused_output + osm_0 + sat_0),
+            alpha,
+        )
 
     def output(self, output, decoder):
-
-        output = output.transpose(1, 2).view(
-            -1, self.embed_dims, self.query_dim, self.query_dim
-        )
+        output = output.transpose(1, 2).view(-1, self.embed_dims, self.query_dim, self.query_dim)
 
         p128, p64, p32, p16 = self.pyramid1(output)
 
@@ -336,13 +343,9 @@ class deformable_cross_attention(nn.Module):
         # Make all of these in modules instead
         channels = [24, 40, 112, 1280]
 
-        self.input_proj_list_sat = self.get_input_proj_list(
-            channels, self.embed_dims, num_levels
-        )
+        self.input_proj_list_sat = self.get_input_proj_list(channels, self.embed_dims, num_levels)
 
-        self.input_proj_list_osm = self.get_input_proj_list(
-            channels, self.embed_dims, num_levels
-        )
+        self.input_proj_list_osm = self.get_input_proj_list(channels, self.embed_dims, num_levels)
 
         hidden_dim = 128
         self.dropout1 = nn.Dropout(dropout)
@@ -352,10 +355,7 @@ class deformable_cross_attention(nn.Module):
         self.learnable_alpha = nn.Parameter(torch.tensor(0.0, requires_grad=True))
 
         self.adaptive_alpha = nn.Sequential(
-            nn.Linear(self.embed_dims, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1),
-            nn.Sigmoid()
+            nn.Linear(self.embed_dims, 64), nn.ReLU(), nn.Linear(64, 1), nn.Sigmoid()
         )
 
         self.alpha_type = alpha_type
@@ -365,25 +365,20 @@ class deformable_cross_attention(nn.Module):
         self.norm_osm = nn.LayerNorm(self.embed_dims)
 
     def forward(self, Q, sat_features, osm_features, batch_size, alpha_hint=None):
-
         # MS deformable attention has particular inputs
         (
             sat_flattened,
             reference_points_sat,
             sat_spatial_shapes,
             sat_level_start_index,
-        ) = self.prepare_input_ms_deformable_attention(
-            sat_features, self.input_proj_list_sat
-        )
+        ) = self.prepare_input_ms_deformable_attention(sat_features, self.input_proj_list_sat)
 
         (
             osm_flattened,
             reference_points_osm,
             osm_spatial_shapes,
             osm_level_start_index,
-        ) = self.prepare_input_ms_deformable_attention(
-            osm_features, self.input_proj_list_osm
-        )
+        ) = self.prepare_input_ms_deformable_attention(osm_features, self.input_proj_list_osm)
 
         # Apply deformable attention for satellite and OSM
         sat_attention_output = self.deformable_attention_sat(
@@ -409,12 +404,12 @@ class deformable_cross_attention(nn.Module):
         elif self.alpha_type == 1:
             alpha = torch.sigmoid(self.learnable_alpha)
         else:
-            alpha = self.adaptive_alpha(torch.cat((sat_attention_output, osm_attention_output), dim=1))
+            alpha = self.adaptive_alpha(
+                torch.cat((sat_attention_output, osm_attention_output), dim=1)
+            )
             alpha = alpha.mean(dim=1).unsqueeze(1)
 
-        fused_output = torch.add(
-            alpha * sat_attention_output, (1 - alpha) * osm_attention_output
-        )
+        fused_output = torch.add(alpha * sat_attention_output, (1 - alpha) * osm_attention_output)
 
         fused_output = self.norm(fused_output + Q)
         sat_attention_output = self.norm_sat(sat_attention_output + Q)
@@ -483,4 +478,3 @@ class deformable_cross_attention(nn.Module):
             features_flattened.size(0), -1, len(features), -1
         )  # Shape: (batch_size, num_query, num_levels, 2)
         return features_flattened, reference_points, spatial_shapes, level_start_index
-

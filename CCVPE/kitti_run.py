@@ -3,20 +3,22 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, Subset
-from dual_datasets import VIGORDataset
+from dual_datasets import KITTIDataset
 from utils import process_data_augment, process_data, get_data_transforms
 from registry import get_registry
 from test import load_model, run_test_dataset, save_distances
 import wandb
 import random
+from torchvision import transforms
 
 
 def main():
+    debug = True
     weight_ori = 1e1
     weight_infoNCE = 1e4
     use_augment = False
     ori_noise = 180
-    experiment_name = "CCVPE_sat_cosine_decay"
+    experiment_name = "kitti_CCVPE_osm_debug"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_wrapper = get_registry(experiment_name)(
         experiment_name, device, weight_infoNCE, weight_ori
@@ -31,23 +33,28 @@ def main():
     wandb.init(project="VITA", name=experiment_name)
     check_experiment_name(experiment_name)
 
-    dataset_root = "/work/vita/qngo/VIGOR"
+    dataset_root = "/work/vita/qngo/KITTI"
     learning_rate = 1e-4
     batch_size = 8
     num_epoch = 14
-    area = "samearea"
-    training = True
-    pos_only = True
-    transform_grd, transform_sat = get_data_transforms()
+    _, transform_sat = get_data_transforms()
+    transform_grd = transforms.Compose(
+        [
+            transforms.Resize(size=[256, 1024]),  # Different numbers than VIGOR ?
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
 
-    vigor = VIGORDataset(
-        dataset_root,
-        split=area,
-        train=training,
-        pos_only=pos_only,
-        ori_noise=ori_noise,
+    train_file = split_list()[0]
+
+    kitti = KITTIDataset(
+        root=dataset_root,
+        file=train_file,
         transform=(transform_grd, transform_sat),
-        use_osm_tiles=True,
+        shift_range_lat=20,
+        shift_range_lon=20,
+        rotation_range=ori_noise,
     )
 
     optimizer = torch.optim.AdamW(
@@ -56,12 +63,13 @@ def main():
         betas=(0.9, 0.999),
         weight_decay=0.05,
     )
+
     print(f"model name {experiment_name}")
     writer = SummaryWriter(log_dir=os.path.join("runs", experiment_name))
 
-    train_dataloader, val_dataloader = get_dataloaders(
-        vigor, batch_size, debug_mode=(debug := False)
-    )
+    train_dataloader, val_dataloader = get_dataloaders(kitti, batch_size, debug_mode=debug)
+    if debug:
+        num_epoch *= 100
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
         max_lr=learning_rate,
@@ -70,8 +78,6 @@ def main():
         epochs=num_epoch,
     )
 
-    if debug:
-        num_epoch *= 100
     best_epoch = train(
         num_epoch,
         train_dataloader,
@@ -88,7 +94,7 @@ def main():
 
     if not debug:
         print("launch test on epoch ", best_epoch)
-        test(experiment_name, best_epoch, dataset_root, device, writer)
+        test(experiment_name, best_epoch, dataset_root, device, writer, ori_noise=ori_noise)
 
 
 def test(
@@ -99,6 +105,7 @@ def test(
     tb_writer,
     area="samearea",
     pos_only=True,
+    ori_noise=180,
 ):
     base_path = "/work/vita/qngo/test_results"
     if not os.path.exists(os.path.join(base_path, experiment_name)):
@@ -106,31 +113,41 @@ def test(
 
     training = False
     batch_size = 16
-    transform_grd, transform_sat = get_data_transforms()
-    vigor = VIGORDataset(
-        dataset_root,
-        split=area,
-        train=training,
-        pos_only=pos_only,
-        transform=(transform_grd, transform_sat),
-        use_osm_tiles=True,
+    _, transform_sat = get_data_transforms()
+    transform_grd = transforms.Compose(
+        [
+            transforms.Resize(size=[256, 1024]),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
     )
 
-    model_wrapper = get_registry(experiment_name)(experiment_name, device)
-    base_model_path = "/work/vita/qngo/models/VIGOR/"
-    load_model(model_wrapper, base_model_path, experiment_name, epoch=epoch)
-    distances = run_test_dataset(
-        experiment_name,
-        dataset=vigor,
-        model_wrapper=model_wrapper,
-        batch_size=batch_size,
-        device=device,
-        base_path=base_path,
-    )
+    test_files = split_list()[1:]
+    for i, test_file in enumerate(test_files):
+        kitti = KITTIDataset(
+            root=dataset_root,
+            file=test_file,
+            transform=(transform_grd, transform_sat),
+            shift_range_lat=20,
+            shift_range_lon=20,
+            rotation_range=ori_noise,
+        )
 
-    save_distances(experiment_name, distances, base_path)
-    tb_writer.add_scalar("Test/mean_distance", np.mean(distances), 0)
-    tb_writer.add_scalar("Test/median_distance", np.median(distances), 0)
+        model_wrapper = get_registry(experiment_name)(experiment_name, device)
+        base_model_path = "/work/vita/qngo/models/VIGOR/"
+        load_model(model_wrapper, base_model_path, experiment_name, epoch=epoch)
+        distances = run_test_dataset(
+            experiment_name,
+            dataset=kitti,
+            model_wrapper=model_wrapper,
+            batch_size=batch_size,
+            device=device,
+            base_path=base_path,
+        )
+
+        save_distances(experiment_name, distances, base_path)
+        tb_writer.add_scalar(f"Test_{i + 1}/mean_distance", np.mean(distances), 0)
+        tb_writer.add_scalar(f"Test_{i + 1}/median_distance", np.median(distances), 0)
 
 
 def train(
@@ -249,12 +266,12 @@ def check_experiment_name(experiment_name: str):
         raise Exception(f"name already taken {experiment_name}")
 
 
-def get_dataloaders(vigor_dataset: VIGORDataset, batch_size: int, debug_mode: bool = False):
+def get_dataloaders(kitti_dataset: KITTIDataset, batch_size: int, debug_mode: bool = False):
     """
     debug mode is used to run overfit test and see if the whole training loop is not crashing
     """
-    vigor = vigor_dataset
-    index_list = np.arange(vigor.__len__())
+    kitti = kitti_dataset
+    index_list = np.arange(kitti.__len__())
     np.random.shuffle(index_list)
     train_indices = index_list[0 : int(len(index_list) * 0.8)]
     val_indices = index_list[int(len(index_list) * 0.8) :]
@@ -263,8 +280,8 @@ def get_dataloaders(vigor_dataset: VIGORDataset, batch_size: int, debug_mode: bo
         train_indices = index_list[0:10]
         val_indices = index_list[10:15]
 
-    training_set = Subset(vigor, train_indices)
-    val_set = Subset(vigor, val_indices)
+    training_set = Subset(kitti, train_indices)
+    val_set = Subset(kitti, val_indices)
     train_dataloader = DataLoader(training_set, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
 
@@ -281,6 +298,12 @@ def check_for_nan_params(model):
             nan_found = True
     if not nan_found:
         print("No NaNs in any parameters.")
+
+
+def split_list() -> list[str]:
+    return list(
+        map(lambda x: os.path.join("kitti_split", x), os.listdir(os.path.join("kitti_split")))
+    )
 
 
 if __name__ == "__main__":

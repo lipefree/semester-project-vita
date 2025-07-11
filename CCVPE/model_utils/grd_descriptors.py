@@ -1,22 +1,12 @@
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
-import numpy as np
-from PIL import ImageFile
-from mmcv.ops import MultiScaleDeformableAttention
 from efficientnet_pytorch.model import EfficientNet
-from model_utils.fused_image_deformable_fusion_v2 import deformable_fusion
-
-ImageFile.LOAD_TRUNCATED_IMAGES = True
-torch.manual_seed(17)
-np.random.seed(0)
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-"The device is: {}".format(device)
+from dual_datasets import DatasetType
 
 
 class permute_channels(nn.Module):
     def __init__(self, B, C, H, W):
-        super(permute_channels, self).__init__()
+        super().__init__()
         self.B = B
         self.C = C
         self.H = H
@@ -26,51 +16,59 @@ class permute_channels(nn.Module):
         return torch.permute(x, (self.B, self.C, self.H, self.W))
 
 
-class GroundEncoder(nn.Module):
-    def __init__(self, circular_padding=True):
+class GroundDescriptors(nn.Module):
+    def __init__(self, dataset_type: DatasetType, circular_padding):
         super().__init__()
-
         self.grd_efficientnet = EfficientNet.from_pretrained("efficientnet-b0", circular_padding)
 
+        dimensions: list[int]
+        proj_dim: int
+        match dataset_type:
+            case DatasetType.KITTI:
+                dimensions = [64, 32, 16, 8, 4, 2]
+                proj_dim = 10
+            case DatasetType.VIGOR:
+                dimensions = [16, 8, 4, 2, 1, 1]
+                proj_dim = 8
+            case _:
+                raise Exception("dataset_type must be of one of DatasetType")
+
         self.grd_feature_to_descriptor1 = nn.Sequential(
-            nn.Conv2d(1280, 64, 1),
+            nn.Conv2d(1280, dimensions[0], 1),
             permute_channels(0, 2, 3, 1),
-            nn.Conv2d(10, 1, 1),
+            nn.Conv2d(proj_dim, 1, 1),
             nn.Flatten(start_dim=1),
         )
 
         self.grd_feature_to_descriptor2 = nn.Sequential(
-            nn.Conv2d(1280, 32, 1),
+            nn.Conv2d(1280, dimensions[1], 1),
             permute_channels(0, 2, 3, 1),
-            nn.Conv2d(10, 1, 1),
+            nn.Conv2d(proj_dim, 1, 1),
             nn.Flatten(start_dim=1),
         )
 
         self.grd_feature_to_descriptor3 = nn.Sequential(
-            nn.Conv2d(1280, 16, 1),
+            nn.Conv2d(1280, dimensions[2], 1),
             permute_channels(0, 2, 3, 1),
-            nn.Conv2d(10, 1, 1),
+            nn.Conv2d(proj_dim, 1, 1),
             nn.Flatten(start_dim=1),
         )
-
         self.grd_feature_to_descriptor4 = nn.Sequential(
-            nn.Conv2d(1280, 8, 1),
+            nn.Conv2d(1280, dimensions[3], 1),
             permute_channels(0, 2, 3, 1),
-            nn.Conv2d(10, 1, 1),
+            nn.Conv2d(proj_dim, 1, 1),
             nn.Flatten(start_dim=1),
         )
-
         self.grd_feature_to_descriptor5 = nn.Sequential(
-            nn.Conv2d(1280, 4, 1),
+            nn.Conv2d(1280, dimensions[4], 1),
             permute_channels(0, 2, 3, 1),
-            nn.Conv2d(10, 1, 1),
+            nn.Conv2d(proj_dim, 1, 1),
             nn.Flatten(start_dim=1),
         )
-
         self.grd_feature_to_descriptor6 = nn.Sequential(
-            nn.Conv2d(1280, 2, 1),
+            nn.Conv2d(1280, dimensions[5], 1),
             permute_channels(0, 2, 3, 1),
-            nn.Conv2d(10, 1, 1),
+            nn.Conv2d(proj_dim, 1, 1),
             nn.Flatten(start_dim=1),
         )
 
@@ -98,7 +96,6 @@ class GroundEncoder(nn.Module):
         grd_descriptor_map4 = grd_descriptor4.unsqueeze(2).unsqueeze(3).repeat(1, 1, 64, 64)
         grd_descriptor_map5 = grd_descriptor5.unsqueeze(2).unsqueeze(3).repeat(1, 1, 128, 128)
         grd_descriptor_map6 = grd_descriptor6.unsqueeze(2).unsqueeze(3).repeat(1, 1, 256, 256)
-
         grd_descriptor_maps = [
             grd_descriptor_map1,
             grd_descriptor_map2,

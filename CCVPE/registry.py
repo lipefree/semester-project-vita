@@ -25,6 +25,7 @@ from wrappers.softSelectV3Wrapper import SoftSelectV3Wrapper
 from wrappers.satScoreMatchWrapper import SatScoreMatchWrapper
 from wrappers.osmScoreMatchWrapper import OsmScoreMatchWrapper
 from wrappers.HCNetWrapper import HCNetWrapper
+from wrappers.KittiCCVPEWrapper import KittiCCVPEWrapper
 from functools import partial
 
 """
@@ -210,6 +211,8 @@ registry = {
     "CCVPE_sat_cosine_decay": partial(
         CCVPEWrapper, use_osm=False
     ),  # Rerun to test cosine decay impact
+    "kitti_CCVPE_sat_debug": partial(KittiCCVPEWrapper),  # Initial run on KITTI
+    "kitti_CCVPE_osm_debug": partial(KittiCCVPEWrapper, use_osm=True),  # Initial run on KITTI
 }
 
 hcnet_registry = {

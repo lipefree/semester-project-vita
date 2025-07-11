@@ -1,4 +1,4 @@
-from models import CVM_VIGOR as CVM
+from models import CVM_KITTI as CVM
 from losses import loss_ccvpe
 from model_utils.fused_image_loss import Fusionloss
 from training_utils import get_location, get_meter_distance, get_orientation_distance
@@ -10,7 +10,7 @@ from torchvision import transforms
 from wrappers.wrapper import Wrapper
 
 
-class CCVPEWrapper(Wrapper):
+class KittiCCVPEWrapper(Wrapper):
     def __init__(
         self,
         experiment_name,
@@ -22,15 +22,12 @@ class CCVPEWrapper(Wrapper):
     ):
         self.model = CVM(
             device,
-            circular_padding=circular_padding,
-            use_adapt=False,
-            use_concat=False,
-            use_osm=use_osm,
         ).to(device)
         self.weight_infoNCE = weight_infoNCE
         self.weight_ori = weight_ori
         self.running_loss = 0
         self.experiment_name = experiment_name
+        self.use_osm = use_osm
 
     def train_step(self, data, global_step, writer):
         grd, sat, osm, gt, gt_with_ori, gt_orientation, city, gt_flattened = data
@@ -53,16 +50,16 @@ class CCVPEWrapper(Wrapper):
         if global_step % 10 == 0:
             self.log_loss("Train", global_step, writer, *losses)
 
-        if global_step % 200 == 0:
+        if global_step % 5 == 0:
             self.log_metric(data, output, global_step, writer)
 
         return losses[0]
 
     def infer(self, data):
         grd, sat, osm, gt, gt_with_ori, gt_orientation, city, gt_flattened = data
-        heatmap = torch.zeros_like(gt)
-        heatmap = heatmap.detach()
-        output = self.model(grd, sat, osm)
+        if self.use_osm:
+            sat = osm
+        output = self.model(grd, sat)
 
         (
             logits_flattened,
@@ -76,7 +73,7 @@ class CCVPEWrapper(Wrapper):
             matching_score_stacked6,
         ) = output
 
-        losses = self.compute_loss(output, gt, gt_orientation, gt_with_ori, osm, sat)
+        losses = self.compute_loss(output, gt, gt_orientation, gt_with_ori)
 
         return output, losses, heatmap
 
@@ -90,7 +87,7 @@ class CCVPEWrapper(Wrapper):
         grd, sat, osm, gt, gt_with_ori, gt_orientation, city, gt_flattened = data
         output, losses, heatmap = self.infer(data)
 
-        losses = self.compute_loss(output, gt, gt_orientation, gt_with_ori, osm, sat)
+        losses = self.compute_loss(output, gt, gt_orientation, gt_with_ori)
 
         (
             logits_flattened,
@@ -152,7 +149,7 @@ class CCVPEWrapper(Wrapper):
             "orientation_error": [],
         }
 
-    def compute_loss(self, output, gt, gt_orientation, gt_with_ori, osm, sat):
+    def compute_loss(self, output, gt, gt_orientation, gt_with_ori):
         (
             logits_flattened,
             heatmap,
