@@ -62,6 +62,8 @@ def main():
     train_dataloader, val_dataloader = get_dataloaders(
         vigor, batch_size, debug_mode=(debug := False)
     )
+    if debug:
+        num_epoch *= 100
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
         max_lr=learning_rate,
@@ -70,8 +72,6 @@ def main():
         epochs=num_epoch,
     )
 
-    if debug:
-        num_epoch *= 100
     best_epoch = train(
         num_epoch,
         train_dataloader,
