@@ -213,6 +213,8 @@ registry = {
     ),  # Rerun to test cosine decay impact
     "kitti_CCVPE_sat_debug": partial(KittiCCVPEWrapper),  # Initial run on KITTI
     "kitti_CCVPE_osm_debug": partial(KittiCCVPEWrapper, use_osm=True),  # Initial run on KITTI
+    "kitti_CCVPE_sat": partial(KittiCCVPEWrapper),  # Initial run on KITTI
+    "kitti_CCVPE_osm": partial(KittiCCVPEWrapper, use_osm=True),  # Initial run on KITTI
 }
 
 hcnet_registry = {

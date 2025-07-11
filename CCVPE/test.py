@@ -17,14 +17,14 @@ base_path = "/work/vita/qngo/test_results"
 
 def main():
     experiment_names = [
-        ("soft_patch_DAF_v3_push_perf", 8),
+        ("CCVPE_sat_cosine_decay_no-augment", 5),
     ]
 
     dataset_root = "/work/vita/qngo/VIGOR"
     batch_size = 64
     fov = 360
-    ori_noise = 0
-    use_augment = True  # a little bit missleading, if the model was trained with augmentation then True, it is not about using augment during test
+    ori_noise = 180
+    use_augment = False  # a little bit missleading, if the model was trained with augmentation then True, it is not about using augment during test
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     circular_padding = True  # apply circular padding along the horizontal direction in the ground feature extractor
     area = "samearea"

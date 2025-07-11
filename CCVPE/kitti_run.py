@@ -13,12 +13,12 @@ from torchvision import transforms
 
 
 def main():
-    debug = True
+    debug = False
     weight_ori = 1e1
     weight_infoNCE = 1e4
     use_augment = False
     ori_noise = 180
-    experiment_name = "kitti_CCVPE_osm_debug"
+    experiment_name = "kitti_CCVPE_sat"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_wrapper = get_registry(experiment_name)(
         experiment_name, device, weight_infoNCE, weight_ori

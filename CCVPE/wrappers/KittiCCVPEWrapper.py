@@ -50,7 +50,7 @@ class KittiCCVPEWrapper(Wrapper):
         if global_step % 10 == 0:
             self.log_loss("Train", global_step, writer, *losses)
 
-        if global_step % 5 == 0:
+        if global_step % 200 == 0:
             self.log_metric(data, output, global_step, writer)
 
         return losses[0]
