@@ -8,6 +8,8 @@ from efficientnet_pytorch.model import EfficientNet
 from model_utils.fused_image_deformable_fusion_v2 import deformable_fusion
 from model_utils.position_encoding import PositionEncodingSine
 from einops import rearrange
+from model_utils.grd_descriptors import GroundDescriptors
+from dual_datasets import DatasetType
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 torch.manual_seed(17)
@@ -55,6 +57,7 @@ class CVM_VIGOR(nn.Module):
         use_concat,
         use_mlp=False,
         alpha_type=0,
+        dataset_type: DatasetType = DatasetType.VIGOR,
     ):
         super().__init__()
         self.device = device
@@ -71,6 +74,10 @@ class CVM_VIGOR(nn.Module):
         self.adapt_50_n = nn.Sequential(
             nn.Conv2d(in_channels=50, out_channels=3, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
+        )
+
+        self.ground_descriptors = GroundDescriptors(
+            dataset_type=dataset_type, circular_padding=circular_padding
         )
 
         self.grd_efficientnet = EfficientNet.from_pretrained(

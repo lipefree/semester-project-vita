@@ -50,7 +50,7 @@ class KittiCCVPEWrapper(Wrapper):
         if global_step % 10 == 0:
             self.log_loss("Train", global_step, writer, *losses)
 
-        if global_step % 200 == 0:
+        if global_step % 10 == 0:
             self.log_metric(data, output, global_step, writer)
 
         return losses[0]
@@ -113,26 +113,26 @@ class KittiCCVPEWrapper(Wrapper):
 
         return validation_state
 
-    def validation_log(self, validation_state, epoch, writer):
+    def validation_log(self, validation_state, epoch, writer, val_str="Validation"):
         loss = np.mean(validation_state["loss"])
         loss_ce = np.mean(validation_state["loss_ce"])
         loss_infonce = np.mean(validation_state["loss_infonce"])
         loss_ori = np.mean(validation_state["loss_ori"])
 
-        self.log_loss("Validation", epoch, writer, loss, loss_ce, loss_infonce, loss_ori)
+        self.log_loss(f"{val_str}", epoch, writer, loss, loss_ce, loss_infonce, loss_ori)
 
-        writer.add_scalar("Validation/mean_distance", np.mean(validation_state["distance"]), epoch)
+        writer.add_scalar(f"{val_str}/mean_distance", np.mean(validation_state["distance"]), epoch)
         writer.add_scalar(
-            "Validation/median_distance", np.median(validation_state["distance"]), epoch
+            f"{val_str}/median_distance", np.median(validation_state["distance"]), epoch
         )
         writer.add_scalar(
-            "Validation/mean_orientation_error",
+            f"{val_str}/mean_orientation_error",
             np.mean(validation_state["orientation_error"]),
             epoch,
         )
 
         writer.add_scalar(
-            "Validation/median_orientation_error",
+            f"{val_str}/median_orientation_error",
             np.median(validation_state["orientation_error"]),
             epoch,
         )

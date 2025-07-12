@@ -8,6 +8,7 @@ import os
 from torchvision.utils import save_image
 from torchvision import transforms
 import random
+from dual_datasets import DatasetType
 
 
 class PatchDAFV3Wrapper:
@@ -20,13 +21,22 @@ class PatchDAFV3Wrapper:
         use_fusion_loss=False,
         only_sat=False,
         random=False,
+        dataset_type: DatasetType = DatasetType.VIGOR,
     ):
+        circular_padding: bool
+        match dataset_type:
+            case DatasetType.KITTI:
+                circular_padding = False
+            case DatasetType.VIGOR:
+                circular_padding = True
+
         self.model = CVM(
             device,
-            circular_padding=True,
+            circular_padding=circular_padding,
             use_adapt=False,
             use_concat=False,
             use_mlp=False,
+            dataset_type=dataset_type,
         ).to(device)
         self.weight_infoNCE = weight_infoNCE
         self.weight_ori = weight_ori

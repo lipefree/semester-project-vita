@@ -3,22 +3,25 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader, Subset
-from dual_datasets import KITTIDataset
+from dual_datasets import KITTIDataset, KITTIDatasetTest
 from utils import process_data_augment, process_data, get_data_transforms
 from registry import get_registry
 from test import load_model, run_test_dataset, save_distances
 import wandb
 import random
 from torchvision import transforms
+from functools import partial
+import numpy as np
 
 
 def main():
     debug = False
+    use_scheduler = False
     weight_ori = 1e1
     weight_infoNCE = 1e4
     use_augment = False
     ori_noise = 180
-    experiment_name = "kitti_CCVPE_sat"
+    experiment_name = "kitti_CCVPE_sat_debug"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_wrapper = get_registry(experiment_name)(
         experiment_name, device, weight_infoNCE, weight_ori
@@ -57,6 +60,38 @@ def main():
         rotation_range=ori_noise,
     )
 
+    # TODO: why are we validating on the test split ? It was also done for CCVPE and FG^2
+    kitti_test1 = KITTIDatasetTest(
+        root=dataset_root,
+        file=split_list()[1],
+        transform=(transform_grd, transform_sat),
+        shift_range_lat=20,
+        shift_range_lon=20,
+        rotation_range=ori_noise,
+    )
+
+    kitti_test2 = KITTIDatasetTest(
+        root=dataset_root,
+        file=split_list()[2],
+        transform=(transform_grd, transform_sat),
+        shift_range_lat=20,
+        shift_range_lon=20,
+        rotation_range=ori_noise,
+    )
+
+    if debug:
+        index_list = np.arange(15)
+        kitti_test1 = Subset(kitti_test1, index_list)
+        kitti_test2 = Subset(kitti_test1, index_list)
+
+    test_loader = partial(
+        DataLoader, batch_size=batch_size, shuffle=False, pin_memory=True, drop_last=False
+    )
+    kitti_test1_loader = test_loader(dataset=kitti_test1)
+    kitti_test2_loader = test_loader(dataset=kitti_test2)
+
+    val_dataloaders: list[DataLoader] = [kitti_test1_loader, kitti_test2_loader]
+
     optimizer = torch.optim.AdamW(
         model_wrapper.get_model().parameters(),
         lr=learning_rate,
@@ -70,18 +105,21 @@ def main():
     train_dataloader, val_dataloader = get_dataloaders(kitti, batch_size, debug_mode=debug)
     if debug:
         num_epoch *= 100
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        max_lr=learning_rate,
-        pct_start=0.05,
-        steps_per_epoch=len(train_dataloader),
-        epochs=num_epoch,
-    )
+
+    scheduler = None
+    if use_scheduler:
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=learning_rate,
+            pct_start=0.05,
+            steps_per_epoch=len(train_dataloader),
+            epochs=num_epoch,
+        )
 
     best_epoch = train(
         num_epoch,
         train_dataloader,
-        val_dataloader,
+        val_dataloaders,
         optimizer,
         scheduler,
         model_wrapper,
@@ -153,9 +191,9 @@ def test(
 def train(
     num_epoch,
     train_dataloader,
-    val_dataloader,
+    val_dataloaders: list[DataLoader],
     optimizer,
-    scheduler,
+    scheduler: torch.optim.lr_scheduler.OneCycleLR | None,
     model_wrapper,
     tb_writer,
     device,
@@ -179,7 +217,7 @@ def train(
             tb_writer,
             use_augment,
         )
-        mean_distance = validation_step(val_dataloader, model_wrapper, device, epoch, tb_writer)
+        mean_distance = validation_step(val_dataloaders, model_wrapper, device, epoch, tb_writer)
         if not debug and mean_distance < best_distance:
             save_model(model_wrapper, epoch, experiment_name)
             best_epoch = epoch
@@ -191,7 +229,7 @@ def train(
 def train_step(
     train_dataloader,
     optimizer,
-    scheduler,
+    scheduler: torch.optim.lr_scheduler.OneCycleLR | None,
     model_wrapper,
     device,
     global_step,
@@ -213,29 +251,33 @@ def train_step(
         loss = model_wrapper.train_step(processed_data, steps, tb_writer)
         loss.backward()
         optimizer.step()
-        scheduler.step()
         steps += 1
         wandb.log({"train/loss": loss})
-        wandb.log({"train/lr": scheduler.get_last_lr()})
+        if scheduler is not None:
+            scheduler.step()
+            wandb.log({"train/lr": scheduler.get_last_lr()})
     return steps
 
 
-def validation_step(val_dataloader, model_wrapper, device, epoch, tb_writer):
+def validation_step(val_dataloaders: list[DataLoader], model_wrapper, device, epoch, tb_writer):
     """
     Note that we use a validation state that can be different from model to model.
     It is used to log everything at the end when we have finished running over the entire
     validation set.
     """
     model_wrapper.set_model_to_eval()
-    validation_state = model_wrapper.init_validation_state()
-    with torch.no_grad():
-        for i, data in enumerate(val_dataloader, 0):
-            processed_data = process_data(data, device)
-            validation_state = model_wrapper.validation_step(processed_data, validation_state)
+    for i, val_dataloader in enumerate(val_dataloaders):
+        validation_state = model_wrapper.init_validation_state()
+        with torch.no_grad():
+            for _, data in enumerate(val_dataloader, 0):
+                processed_data = process_data(data, device)
+                validation_state = model_wrapper.validation_step(processed_data, validation_state)
 
-    model_wrapper.validation_log(validation_state, epoch, tb_writer)
-    mean_distance = np.mean(validation_state["distance"])
-    wandb.log({"validation/mean_distance": mean_distance})
+        model_wrapper.validation_log(
+            validation_state, epoch, tb_writer, val_str=f"Validation_test{i}"
+        )
+        mean_distance = np.mean(validation_state["distance"])
+        wandb.log({f"validation_test{i}/mean_distance": mean_distance})
 
     return mean_distance
 

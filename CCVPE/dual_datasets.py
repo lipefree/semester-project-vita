@@ -643,12 +643,13 @@ class KITTIDatasetTest(Dataset):
 
         self.skip_in_seq = 2  # skip 2 in sequence: 6,3,1~
         if transform != None:
-            self.satmap_transform = transform[0]
-            self.grdimage_transform = transform[1]
+            self.grdimage_transform = transform[0]
+            self.satmap_transform = transform[1]
 
         self.pro_grdimage_dir = "raw_data"
 
         self.satmap_dir = satmap_dir
+        self.osmtile_dir = osmtile_dir
 
         with open(file, "r") as f:
             file_name = f.readlines()
@@ -673,9 +674,11 @@ class KITTIDatasetTest(Dataset):
         with PIL.Image.open(SatMap_name, "r") as SatMap:
             sat_map = SatMap.convert("RGB")
 
-        osm_tile_name = os.path.join(self.root, self.osmtile_dir, file_name)
+        # =================== read OSM tiles ========================================
+        osm_tile_name = os.path.join(self.root, self.osmtile_dir, file_name.replace("png", "npy"))
         osm_tile_arr = np.load(osm_tile_name)
-        osm_map = Image.fromarray(np.uint8(osm_tile_arr * 255)).convert("RGB")
+        map_viz = Colormap.apply(osm_tile_arr)
+        osm_map = Image.fromarray(np.uint8(map_viz * 255)).convert("RGB")
 
         # =================== initialize some required variables ============================
         grd_left_imgs = torch.tensor([])
@@ -786,6 +789,7 @@ class KITTIDatasetTest(Dataset):
         # transform
         if self.satmap_transform is not None:
             sat_map = self.satmap_transform(sat_map)
+            osm_map = self.satmap_transform(osm_map)
 
         # gt heat map
         x_offset = int(
