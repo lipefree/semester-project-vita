@@ -15,13 +15,13 @@ import numpy as np
 
 
 def main():
-    debug = False
+    debug = True
     use_scheduler = False
     weight_ori = 1e1
     weight_infoNCE = 1e4
     use_augment = False
-    ori_noise = 180
-    experiment_name = "kitti_CCVPE_sat_debug"
+    ori_noise = 10
+    experiment_name = "kitti_soft_patch_DAF_v3"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_wrapper = get_registry(experiment_name)(
         experiment_name, device, weight_infoNCE, weight_ori
@@ -31,15 +31,20 @@ def main():
     else:
         experiment_name += "_no-augment"
 
+    if not use_scheduler:
+        experiment_name += "_no-scheduler"
+
     if ori_noise == 0:
         experiment_name += "_known-orientation"
+    elif ori_noise != 180:
+        experiment_name += f"_{ori_noise}-ori-noise"
     wandb.init(project="VITA", name=experiment_name)
     check_experiment_name(experiment_name)
 
     dataset_root = "/work/vita/qngo/KITTI"
     learning_rate = 1e-4
     batch_size = 8
-    num_epoch = 14
+    num_epoch = 20
     _, transform_sat = get_data_transforms()
     transform_grd = transforms.Compose(
         [

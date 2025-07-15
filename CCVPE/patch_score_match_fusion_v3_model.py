@@ -9,6 +9,7 @@ from model_utils.fused_image_deformable_fusion_v2 import deformable_fusion
 from model_utils.position_encoding import PositionEncodingSine
 from einops import rearrange
 from model_utils.grd_descriptors import GroundDescriptors
+from model_utils.ccvpe_modules import CCVPEModules
 from dual_datasets import DatasetType
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -59,6 +60,7 @@ class CVM_VIGOR(nn.Module):
         alpha_type=0,
         dataset_type: DatasetType = DatasetType.VIGOR,
     ):
+        print("load in dataset_type ", dataset_type)
         super().__init__()
         self.device = device
         self.circular_padding = circular_padding
@@ -126,10 +128,22 @@ class CVM_VIGOR(nn.Module):
             nn.Flatten(start_dim=1),
         )
 
+        match dataset_type:
+            case DatasetType.KITTI:
+                self.rolling_number = 16
+                self.shift_scale = [128, 64, 32, 16, 8, 8]
+                self.embed_dims = [2048, 320, 112, 40, 24, 16]
+                self.first_embed = 2048
+            case DatasetType.VIGOR:
+                self.rolling_number = 20
+                self.shift_scale = [64, 32, 16, 8, 4, 2]
+                self.embed_dims = [1280, 320, 112, 40, 24, 16]
+                self.first_embed = 1280
+
         self.sat_efficientnet = EfficientNet.from_pretrained("efficientnet-b0", circular=False)
 
         self.sat_feature_to_descriptors = nn.Sequential(
-            nn.Flatten(start_dim=1), nn.Linear(1280 * 2 * 2, 1280)
+            nn.Flatten(start_dim=1), nn.Linear(1280 * 2 * 2, self.first_embed)
         )
 
         self.sat_normalization = normalization(2, 1)
@@ -137,94 +151,20 @@ class CVM_VIGOR(nn.Module):
         self.osm_efficientnet = EfficientNet.from_pretrained("efficientnet-b0", circular=False)
 
         self.osm_feature_to_descriptors = nn.Sequential(
-            nn.Flatten(start_dim=1), nn.Linear(1280 * 2 * 2, 1280)
+            nn.Flatten(start_dim=1), nn.Linear(1280 * 2 * 2, self.first_embed)
         )
 
         self.osm_normalization = normalization(2, 1)
 
-        # loc
-        self.deconv6 = nn.ConvTranspose2d(1281, 1024, 2, 2)
-        self.conv6 = double_conv(1344, 640)
+        self.ccvpe_modules = CCVPEModules(dataset_type=dataset_type)
 
-        self.deconv5 = nn.ConvTranspose2d(641, 320, 2, 2)
-        self.conv5 = double_conv(432, 320)
-
-        self.deconv4 = nn.ConvTranspose2d(321, 160, 2, 2)
-        self.conv4 = double_conv(200, 160)
-
-        self.deconv3 = nn.ConvTranspose2d(161, 80, 2, 2)
-        self.conv3 = double_conv(104, 80)
-
-        self.deconv2 = nn.ConvTranspose2d(81, 40, 2, 2)
-        self.conv2 = double_conv(56, 40)
-
-        self.deconv1 = nn.ConvTranspose2d(41, 16, 2, 2)
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(16, 16, 3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(16, 1, 3, stride=1, padding=1),
-        )
-
-        self.convs = nn.ModuleList(
-            [self.conv6, self.conv5, self.conv4, self.conv3, self.conv2, self.conv1]
-        )
-        self.deconvs = nn.ModuleList(
-            [
-                self.deconv6,
-                self.deconv5,
-                self.deconv4,
-                self.deconv3,
-                self.deconv2,
-                self.deconv1,
-            ]
-        )
-
-        # ori
-        self.deconv6_ori = nn.ConvTranspose2d(1300, 1024, 2, 2)
-        self.conv6_ori = double_conv(1344, 640)
-
-        self.deconv5_ori = nn.ConvTranspose2d(640, 256, 2, 2)
-        self.conv5_ori = double_conv(368, 256)
-
-        self.deconv4_ori = nn.ConvTranspose2d(256, 128, 2, 2)
-        self.conv4_ori = double_conv(168, 128)
-
-        self.deconv3_ori = nn.ConvTranspose2d(128, 64, 2, 2)
-        self.conv3_ori = double_conv(88, 64)
-
-        self.deconv2_ori = nn.ConvTranspose2d(64, 32, 2, 2)
-        self.conv2_ori = double_conv(48, 32)
-
-        self.deconv1_ori = nn.ConvTranspose2d(32, 16, 2, 2)
-        self.conv1_ori = nn.Sequential(
-            nn.Conv2d(16, 16, 3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(16, 2, 3, stride=1, padding=1),
-        )
-
-        self.convs_ori = nn.ModuleList(
-            [
-                self.conv6_ori,
-                self.conv5_ori,
-                self.conv4_ori,
-                self.conv3_ori,
-                self.conv2_ori,
-                self.conv1_ori,
-            ]
-        )
-        self.deconvs_ori = nn.ModuleList(
-            [
-                self.deconv6_ori,
-                self.deconv5_ori,
-                self.deconv4_ori,
-                self.deconv3_ori,
-                self.deconv2_ori,
-                self.deconv1_ori,
-            ]
-        )
+        self.convs = self.ccvpe_modules.get_convs()
+        self.deconvs = self.ccvpe_modules.get_deconvs()
+        self.convs_ori = self.ccvpe_modules.get_convs_ori()
+        self.deconvs_ori = self.ccvpe_modules.get_deconvs_ori()
 
         self.fuse_feature_to_descriptors = nn.Sequential(
-            nn.Flatten(start_dim=1), nn.Linear(1280 * 2 * 2, 1280)
+            nn.Flatten(start_dim=1), nn.Linear(1280 * 2 * 2, self.first_embed)
         )
         self.fuse_normalization = normalization(2, 1)
 
@@ -232,15 +172,15 @@ class CVM_VIGOR(nn.Module):
         self.heatmap_norm = nn.LayerNorm(normalized_shape=(512, 512))
 
         self.fusion_volume = FusionModule(
-            1280, 8, 8, 20, 8, device
-        )  # embed dim, H, W, input_embed_dim
-        self.fusion5 = FusionModule(320, 16, 16, 20, 16, device)
-        self.fusion4 = FusionModule(112, 32, 32, 20, 16, device)
-        self.fusion3 = FusionModule(40, 64, 64, 20, 16, device)
-        self.fusion2 = FusionModule(24, 128, 128, 20, 16, device)
-        self.fusion1 = FusionModule(16, 256, 256, 20, 16, device)
+            self.embed_dims[0], 8, 8, self.rolling_number, 8, device
+        )  # embed dim, H, W, input_embed_dim, patch_size
+        self.fusion5 = FusionModule(self.embed_dims[1], 16, 16, self.rolling_number, 16, device)
+        self.fusion4 = FusionModule(self.embed_dims[2], 32, 32, self.rolling_number, 16, device)
+        self.fusion3 = FusionModule(self.embed_dims[3], 64, 64, self.rolling_number, 16, device)
+        self.fusion2 = FusionModule(self.embed_dims[4], 128, 128, self.rolling_number, 16, device)
+        self.fusion1 = FusionModule(self.embed_dims[5], 256, 256, self.rolling_number, 16, device)
 
-        self.learnable_Q = nn.Embedding(8 * 8, 20)
+        self.learnable_Q = nn.Embedding(8 * 8, self.rolling_number)
 
         self.fusions = nn.ModuleList(
             [
@@ -268,38 +208,7 @@ class CVM_VIGOR(nn.Module):
         return nn.ModuleList(input_proj_list)
 
     def forward(self, grd, sat, osm):
-        grd_feature_volume = self.grd_efficientnet.extract_features(grd)
-        grd_descriptor1 = self.grd_feature_to_descriptor1(grd_feature_volume)  # length 1280
-        grd_descriptor2 = self.grd_feature_to_descriptor2(grd_feature_volume)  # length 640
-        grd_descriptor3 = self.grd_feature_to_descriptor3(grd_feature_volume)  # length 320
-        grd_descriptor4 = self.grd_feature_to_descriptor4(grd_feature_volume)  # length 160
-        grd_descriptor5 = self.grd_feature_to_descriptor5(grd_feature_volume)  # length 80
-        grd_descriptor6 = self.grd_feature_to_descriptor6(grd_feature_volume)  # length 40
-
-        grd_descriptors = [
-            grd_descriptor1,
-            grd_descriptor2,
-            grd_descriptor3,
-            grd_descriptor4,
-            grd_descriptor5,
-            grd_descriptor6,
-        ]
-
-        grd_descriptor_map1 = grd_descriptor1.unsqueeze(2).unsqueeze(3).repeat(1, 1, 8, 8)
-        grd_descriptor_map2 = grd_descriptor2.unsqueeze(2).unsqueeze(3).repeat(1, 1, 16, 16)
-        grd_descriptor_map3 = grd_descriptor3.unsqueeze(2).unsqueeze(3).repeat(1, 1, 32, 32)
-        grd_descriptor_map4 = grd_descriptor4.unsqueeze(2).unsqueeze(3).repeat(1, 1, 64, 64)
-        grd_descriptor_map5 = grd_descriptor5.unsqueeze(2).unsqueeze(3).repeat(1, 1, 128, 128)
-        grd_descriptor_map6 = grd_descriptor6.unsqueeze(2).unsqueeze(3).repeat(1, 1, 256, 256)
-
-        grd_descriptor_maps = [
-            grd_descriptor_map1,
-            grd_descriptor_map2,
-            grd_descriptor_map3,
-            grd_descriptor_map4,
-            grd_descriptor_map5,
-            grd_descriptor_map6,
-        ]
+        grd_descriptors, grd_descriptor_maps, grd_feature_volume = self.ground_descriptors(grd)
 
         sat_feature_volume, multiscale_sat = self.sat_efficientnet.extract_features_multiscale(sat)
         sat_feature_block0 = multiscale_sat[0]  # [16, 256, 256]
@@ -332,7 +241,7 @@ class CVM_VIGOR(nn.Module):
 
         batch_size = grd.shape[0]
         f_score = (
-            self.learnable_Q.weight.reshape(8, 8, 20)
+            self.learnable_Q.weight.reshape(8, 8, self.rolling_number)
             .permute(2, 0, 1)
             .unsqueeze(0)
             .repeat(batch_size, 1, 1, 1)
@@ -352,12 +261,22 @@ class CVM_VIGOR(nn.Module):
         ) in enumerate(zip(grd_descriptors, grd_descriptor_maps, fuse_feature_blocks)):
             if fuse_feature_block is not None:
                 x, matching_score_stacked, da_output, a = self.localization_decoder(
-                    level, x, grd_descriptor, grd_descriptor_map, fuse_feature_block
+                    level,
+                    x,
+                    grd_descriptor,
+                    grd_descriptor_map,
+                    fuse_feature_block,
+                    self.rolling_number,
                 )
                 alphas.append(a)
             else:
                 x, matching_score_stacked, da_output = self.localization_decoder(
-                    level, x, grd_descriptor, grd_descriptor_map, fuse_feature_block
+                    level,
+                    x,
+                    grd_descriptor,
+                    grd_descriptor_map,
+                    fuse_feature_block,
+                    self.rolling_number,
                 )
             fuse_features.append(da_output)
             matching_score_stacked_list.append(matching_score_stacked)
@@ -409,12 +328,14 @@ class CVM_VIGOR(nn.Module):
 
         return fuse_descriptor_map
 
-    def compute_matching_score(self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm):
+    def compute_matching_score(
+        self, shift, x, grd_des_len, grd_descriptor_map, grd_map_norm, rolling_number=20
+    ):
         """
         LMU component: rolling and matching part
         TODO: use it once instead
         """
-        for i in range(20):
+        for i in range(rolling_number):
             sat_descriptor_map_rolled = torch.roll(x, shifts=-i * shift, dims=1)
             sat_descriptor_map_window = sat_descriptor_map_rolled[:, :grd_des_len, :, :]
             sat_map_norm = torch.norm(sat_descriptor_map_window, p="fro", dim=1, keepdim=True)
@@ -431,17 +352,16 @@ class CVM_VIGOR(nn.Module):
         return matching_score_max, matching_score_stacked
 
     def localization_decoder(
-        self, level, x, grd_descriptor, grd_descriptor_map, fuse_feature_block
+        self, level, x, grd_descriptor, grd_descriptor_map, fuse_feature_block, rolling_number
     ):
         grd_des_len = grd_descriptor.size()[1]
         fuse_des_len = x.size()[1]
         grd_map_norm = torch.norm(grd_descriptor_map, p="fro", dim=1, keepdim=True)
 
-        shift = int(64 / 2**level)
+        shift = self.shift_scale[level]
         matching_score_max, matching_score_stacked = self.compute_matching_score(
-            shift, x, grd_des_len, grd_descriptor_map, grd_map_norm
+            shift, x, grd_des_len, grd_descriptor_map, grd_map_norm, rolling_number
         )
-
         # loc
         x = torch.cat([matching_score_max, self.fuse_normalization(x)], dim=1)
 

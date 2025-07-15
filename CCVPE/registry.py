@@ -26,7 +26,9 @@ from wrappers.satScoreMatchWrapper import SatScoreMatchWrapper
 from wrappers.osmScoreMatchWrapper import OsmScoreMatchWrapper
 from wrappers.HCNetWrapper import HCNetWrapper
 from wrappers.KittiCCVPEWrapper import KittiCCVPEWrapper
+
 from functools import partial
+from dual_datasets import DatasetType
 
 """
 The registry is a storage of all experiments and how to run them again
@@ -215,10 +217,8 @@ registry = {
     "kitti_CCVPE_osm_debug": partial(KittiCCVPEWrapper, use_osm=True),  # Initial run on KITTI
     "kitti_CCVPE_sat": partial(KittiCCVPEWrapper),  # Initial run on KITTI
     "kitti_CCVPE_osm": partial(KittiCCVPEWrapper, use_osm=True),  # Initial run on KITTI
-    "kitti_CCVPE_sat_no-scheduler": partial(KittiCCVPEWrapper),  # Initial run on KITTI
-    "kitti_CCVPE_osm_no-scheduler": partial(
-        KittiCCVPEWrapper, use_osm=True
-    ),  # Initial run on KITTI
+    "kitti_soft_patch_DAF_v3_debug": partial(PatchDAFV3Wrapper, dataset_type=DatasetType.KITTI),
+    "kitti_soft_patch_DAF_v3": partial(PatchDAFV3Wrapper, dataset_type=DatasetType.KITTI),
 }
 
 hcnet_registry = {

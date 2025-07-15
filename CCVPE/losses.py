@@ -19,9 +19,9 @@ def infoNCELoss(scores, labels, temperature=0.1):
 
     denominator = torch.sum(exp_scores, dim=1, keepdim=True)
     inner_element = torch.log(torch.masked_select(exp_scores / denominator, bool_mask))
-    loss = -torch.sum(
-        inner_element * torch.masked_select(labels, bool_mask)
-    ) / torch.sum(torch.masked_select(labels, bool_mask))
+    loss = -torch.sum(inner_element * torch.masked_select(labels, bool_mask)) / torch.sum(
+        torch.masked_select(labels, bool_mask)
+    )
 
     return loss
 
@@ -51,12 +51,8 @@ def wass_loss(heatmap, labels, gt_coords):
 
     # Create coordinate grid
     device = heatmap.device
-    i = (
-        torch.arange(L, device=device).view(1, L, 1).repeat(B, 1, L)
-    )  # Row indices (B, L, L)
-    j = (
-        torch.arange(L, device=device).view(1, 1, L).repeat(B, L, 1)
-    )  # Column indices (B, L, L)
+    i = torch.arange(L, device=device).view(1, L, 1).repeat(B, 1, L)  # Row indices (B, L, L)
+    j = torch.arange(L, device=device).view(1, 1, L).repeat(B, L, 1)  # Column indices (B, L, L)
 
     # Ground truth coordinates
     i_gt = gt_coords[:, 0].view(B, 1, 1)  # (B, 1, 1)
@@ -74,16 +70,12 @@ def wass_loss(heatmap, labels, gt_coords):
 
 def orientation_loss(ori, gt_orientation, gt):
     return (
-        torch.sum(
-            torch.sum(torch.square(gt_orientation - ori), dim=1, keepdim=True) * gt
-        )
+        torch.sum(torch.sum(torch.square(gt_orientation - ori), dim=1, keepdim=True) * gt)
         / ori.size()[0]
     )
 
 
-def loss_ccvpe(
-    output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori
-) -> float:
+def loss_ccvpe(output, gt, gt_orientation, gt_with_ori, weight_infoNCE, weight_ori) -> float:
     if len(output) == 9:
         (
             logits_flattened,
@@ -169,9 +161,7 @@ def loss_ccvpe(
 def loss_router(weight, logits, gt_choice, sat_dist, osm_dist, t) -> float:
     # Binary cross-entropy loss
     ce_loss = nn.CrossEntropyLoss(weight=weight, reduction="none")
-    loss1 = ce_loss(
-        logits, gt_choice
-    )  # Binary classification loss for routing decision
+    loss1 = ce_loss(logits, gt_choice)  # Binary classification loss for routing decision
 
     # print(f'chosen {chosen}')
 
@@ -244,9 +234,7 @@ def distance(x, y, city):
         else:
             scale_list.append(CITY_SCALE["NewYork"])
 
-    scale_t = torch.tensor(
-        scale_list, dtype=pixel_distance.dtype, device=pixel_distance.device
-    )
+    scale_t = torch.tensor(scale_list, dtype=pixel_distance.dtype, device=pixel_distance.device)
     meter_distance = pixel_distance * scale_t / 512.0 * 640.0
 
     return meter_distance

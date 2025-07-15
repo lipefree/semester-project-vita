@@ -16,7 +16,7 @@ def main():
     weight_infoNCE = 1e4
     use_augment = False
     ori_noise = 180
-    experiment_name = "CCVPE_sat_cosine_decay"
+    experiment_name = "soft_patch_DAF_v3_push_perf_debug"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_wrapper = get_registry(experiment_name)(
         experiment_name, device, weight_infoNCE, weight_ori

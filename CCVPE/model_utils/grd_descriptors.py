@@ -24,10 +24,10 @@ class GroundDescriptors(nn.Module):
         dimensions: list[int]
         proj_dim: int
         match dataset_type:
-            case DatasetType.KITTI:
+            case DatasetType.VIGOR:
                 dimensions = [64, 32, 16, 8, 4, 2]
                 proj_dim = 10
-            case DatasetType.VIGOR:
+            case DatasetType.KITTI:
                 dimensions = [16, 8, 4, 2, 1, 1]
                 proj_dim = 8
             case _:
@@ -105,4 +105,4 @@ class GroundDescriptors(nn.Module):
             grd_descriptor_map6,
         ]
 
-        return grd_descriptors, grd_descriptor_maps
+        return grd_descriptors, grd_descriptor_maps, grd_feature_volume
